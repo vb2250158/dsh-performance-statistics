@@ -1,0 +1,3 @@
+- insert:
+    - id: performance-statistics
+      name: dsh-performance-statistics

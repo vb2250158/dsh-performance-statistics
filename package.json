@@ -1,0 +1,77 @@
+{
+  "name": "dsh-performance-statistics",
+  "version": "0.1.0",
+  "description": "Detailed session performance timings and interactive charts for DeepSeek Harness",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./icon": "./icon.svg",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-primitives",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
+    }
+  },
+  "files": [
+    "src",
+    "lib",
+    "scripts",
+    "tests",
+    "locale",
+    "cordis.patch.yml",
+    "icon.svg",
+    "README.md",
+    "README_en.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "test:host": "node tests/session-timing.host-smoke.mjs"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.5-alpha.1 <5.0.0",
+    "@deepseek-ai/dsh-llm": ">=0.2.1-alpha.1 <0.3.0",
+    "@deepseek-ai/dsh-session-projection": ">=0.2.1-alpha.1 <0.3.0",
+    "@deepseek-ai/dsh-agent": ">=0.2.1-alpha.1 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-primitives": ">=0.2.1-alpha.1 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-conversation": ">=0.2.1-alpha.1 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-slots": ">=0.2.1-alpha.1 <0.3.0",
+    "react": "^18.2.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vb2250158/dsh-performance-statistics.git"
+  },
+  "homepage": "https://github.com/vb2250158/dsh-performance-statistics#readme",
+  "bugs": {
+    "url": "https://github.com/vb2250158/dsh-performance-statistics/issues"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "performance",
+    "telemetry"
+  ],
+  "license": "MIT",
+  "icon": "./icon.svg",
+  "engines": {
+    "node": ">=24.9"
+  }
+}
