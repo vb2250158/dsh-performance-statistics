@@ -151,9 +151,11 @@ function statisticsNumber(value, t, digits = 1) {
   return new Intl.NumberFormat(t('numberLocale'), { maximumFractionDigits: digits }).format(value)
 }
 
-function statisticsDuration(value, t, exact = false) {
+function statisticsDuration(value, t) {
   if (value === undefined) return t('missing')
-  return exact ? t('milliseconds', { value: statisticsNumber(value, t, 2) }) : t('seconds', { value: statisticsNumber(value / 1000, t) })
+  return value > 1000
+    ? t('seconds', { value: statisticsNumber(value / 1000, t, 3) })
+    : t('milliseconds', { value: statisticsNumber(value, t, 2) })
 }
 
 const statisticsNode = React.createElement
@@ -200,9 +202,9 @@ function AuxiliaryCall({ call, t }) {
     ['caller', call.plugin ?? t('unavailableCaller')], ['task', purposeText],
     ['rules', ruleText || t('missing')], ['contextStage', stageCopy.some(row => row[0] === parent) ? t(`phase_${parent}`) : t('missing')],
     ['provider', call.provider ?? t('missing')], ['route', call.model ?? call.detail ?? t('missing')],
-    ['requestTime', statisticsDuration(call.endTime - call.startTime, t, true)],
-    ['firstTokenWait', statisticsDuration(call.firstTokenTime === undefined ? undefined : call.firstTokenTime - call.startTime, t, true)],
-    ['streamTime', statisticsDuration(call.firstTokenTime === undefined ? undefined : call.endTime - call.firstTokenTime, t, true)],
+    ['requestTime', statisticsDuration(call.endTime - call.startTime, t)],
+    ['firstTokenWait', statisticsDuration(call.firstTokenTime === undefined ? undefined : call.firstTokenTime - call.startTime, t)],
+    ['streamTime', statisticsDuration(call.firstTokenTime === undefined ? undefined : call.endTime - call.firstTokenTime, t)],
     ['started', new Intl.DateTimeFormat(t('numberLocale'), { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3, hour12: false }).format(call.startTime)],
     ['outcome', t(call.failed ? 'interrupted' : 'succeeded')],
   ]
@@ -227,7 +229,7 @@ function StatisticsDetails({ stats, usage, stages, t }) {
     { key: 'responseWait', value: reading.responseWait, description: t('responseScope') },
     { key: 'ttft', value: reading.averageTtft, description: t('ttftScope', { value: stats.ttftSteps }) },
     { key: 'decode', value: stats.decodeMs, description: t('decodeScope') },
-  ].map(row => ({ ...row, label: t(row.key), value: statisticsDuration(row.value, t, true) }))
+  ].map(row => ({ ...row, label: t(row.key), value: statisticsDuration(row.value, t) }))
   rows.push({ key: 'decodeTokens', label: t('decodeTokens'), value: statisticsNumber(stats.decodeTokens, t, 0), description: t('speedScope') })
   return h('div', { className: 'dsh-session-statistics-body' },
     h('dl', { className: 'dsh-session-statistics-summary' },
@@ -246,7 +248,7 @@ function StatisticsDetails({ stats, usage, stages, t }) {
     reading.phases.length > 0 && h('section', { className: 'dsh-session-statistics-section' },
       h('h3', null, t('phases')), selected !== undefined && h(Button, { onClick: () => setSelected(undefined) }, t('clear')),
       h(StatisticsTable, { label: t('phases'), t, rows: reading.phases.filter(row => selected === undefined || row.key === selected)
-        .map(row => ({ key: row.key, stage: row.key, label: t(`phase_${row.key}`), value: statisticsDuration(row.milliseconds, t, true), description: t(`scope_${row.key}`) })) })),
+        .map(row => ({ key: row.key, stage: row.key, label: t(`phase_${row.key}`), value: statisticsDuration(row.milliseconds, t), description: t(`scope_${row.key}`) })) })),
     stages?.calls?.some(call => call.role === 'auxiliary') && (selected === undefined || selected === 'auxiliaryModel') &&
       h('section', { className: 'dsh-session-statistics-section', 'aria-label': t('auxiliaryCalls') }, h('h3', null, t('auxiliaryCalls')),
         h('p', { className: 'dsh-session-statistics-note' }, t('auxiliaryHelp')),
@@ -255,7 +257,7 @@ function StatisticsDetails({ stats, usage, stages, t }) {
     stages?.details.length > 0 && h('section', { className: 'dsh-session-statistics-section' }, h('h3', null, t('operations')),
       h('p', { className: 'dsh-session-statistics-note' }, t('operationScope')),
       h(StatisticsTable, { label: t('operations'), t, rows: stages.details.map((row, index) => ({ key: String(index),
-        label: row.name, value: statisticsDuration(row.milliseconds, t, true),
+        label: row.name, value: statisticsDuration(row.milliseconds, t),
         description: `${t(`phase_${row.kind}`)} · ${t('calls')} ${statisticsNumber(row.calls, t, 0)} · ${t('failed')} ${statisticsNumber(row.failed, t, 0)}` })) })),
     h('section', { className: 'dsh-session-statistics-section' }, h('h3', null, t('metrics')), h(StatisticsTable, { rows, label: t('metrics'), t })),
     usage !== undefined && h('section', { className: 'dsh-session-statistics-section' }, h('h3', null, t('tokens')),

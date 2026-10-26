@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1 — 2026-10-26
+
+- 全部耗时统一自动选择单位：超过 1 秒显示秒，最多保留三位小数；1 秒及以下显示毫秒。
+- Automatically format every duration: seconds with up to three decimal places above one second, milliseconds otherwise.
+
 ## 0.1.0 — 2026-10-26
 
 - 从聊天增强提取为独立插件，包含阶段饼图、逐次辅助模型明细与完整日志投影。

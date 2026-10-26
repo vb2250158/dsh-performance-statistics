@@ -2,14 +2,14 @@
 
 [English](README_en.md) · MIT
 
-DeepSeek Harness 的独立性能统计插件。点击输入框下方的统计按钮，弹窗查看耗时饼图、阶段毫秒明细、逐次辅助模型调用、首个输出等待、输出速度和 Token 用量。
+DeepSeek Harness 的独立性能统计插件。点击输入框下方的统计按钮，弹窗查看耗时饼图、阶段耗时明细、逐次辅助模型调用、首个输出等待、输出速度和 Token 用量。超过 1 秒的耗时显示为秒，最多三位小数；1 秒及以下显示为毫秒。
 
 ## 安装与迁移
 
 适用于 DSH 0.2.1 系列公开插件 API，已在 0.2.1-rc.3 验证。通过 DSH 的插件管理器安装本仓库，或使用受支持的 CLI：
 
 ```sh
-dsh plugin --profile web add github:vb2250158/dsh-performance-statistics#v0.1.0
+dsh plugin --profile web add github:vb2250158/dsh-performance-statistics#v0.1.1
 ```
 
 安装后启用 **Performance statistics / 性能统计**，重新打开网页。发送一条消息，轮次结束后点击统计按钮；辅助模型卡片可展开，饼图和图例可点击筛选。

@@ -45,8 +45,8 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     assert.deepEqual(tokens.filter(token => !theme.includes(`${token}:`)), [], 'All chart and dialog colors exist in the host theme')
     assert.equal(rows.filter(row => row.options.name === 'conversation.composer.dock' && row.options.id === 'usage').length, 0)
     const translate = language => (key, args = {}) => Object.entries(args).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), dictionaries.get(activity.options.locale)[language][key] ?? key)
-    let stats = { turns: 1, steps: 1, turnMs: 17800, llmMs: 3300, toolMs: 0, compactionMs: 0, otherMs: 14500,
-      ttftMs: 3200, ttftSteps: 1, decodeMs: 100, decodeTokens: 24 }
+    let stats = { turns: 1, steps: 1, turnMs: 17800, llmMs: 3300, toolMs: 1000, compactionMs: 999, otherMs: 14500,
+      ttftMs: 3200, ttftSteps: 1, decodeMs: 1001, decodeTokens: 24 }
     const usage = { uncachedInputTokens: 31900, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 24 }
     let stages = { closedMs: 17800, turns: 1, firstOutputMs: 17700, firstOutputTurns: 1, measuredSpans: 2, incompleteSpans: 0,
       phases: { turnPrepare: 100, preStep: 2400, auxiliaryModel: 12000, modelWait: 3200, modelOutput: 100 },
@@ -70,8 +70,11 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
 
     const dialog = document.querySelector('[role="dialog"]')
     assert.equal(dialog.getAttribute('aria-modal'), 'true')
-    assert.match(dialog.textContent, /12,000 毫秒/)
-    assert.match(dialog.textContent, /3,200 毫秒/)
+    assert.match(dialog.textContent, /12 秒/)
+    assert.match(dialog.textContent, /3.2 秒/)
+    assert.match(dialog.textContent, /1,000 毫秒/)
+    assert.match(dialog.textContent, /999 毫秒/)
+    assert.match(dialog.textContent, /1.001 秒/)
     assert.match(dialog.textContent, /31,900/)
     assert.doesNotMatch(dialog.textContent, /其他处理与等待/)
     assert.match(dialog.textContent, /同一毫秒只计入一个环节/)
@@ -88,16 +91,16 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     assert.equal(callButton.getAttribute('aria-expanded'), 'true')
     const callDetails = dialog.querySelector('[data-auxiliary-call="first"]').textContent
     assert.match(callDetails, /dsh-jev-context-gate/)
-    assert.match(callDetails, /6,000 毫秒/)
+    assert.match(callDetails, /6 秒/)
     assert.match(callDetails, /1,000 毫秒/)
-    assert.match(callDetails, /7,000 毫秒/)
+    assert.match(callDetails, /7 秒/)
     assert.equal(dialog.querySelector('[data-stage-legend="auxiliaryModel"]').getAttribute('aria-pressed'), 'true')
     await React.act(async () => dialog.querySelector('[data-stage-legend="auxiliaryModel"]').click())
     assert.equal(dialog.querySelectorAll('[data-stage-row]').length, 5)
 
     stats = { ...stats, toolMs: 35600 }
     await React.act(async () => render())
-    assert.match(dialog.textContent, /35,600 毫秒/)
+    assert.match(dialog.textContent, /35.6 秒/)
     assert.ok(Math.abs(fractions().reduce((sum, value) => sum + value, 0) - 1) < 0.000001, 'Parallel work totals cannot inflate pie shares')
     await React.act(async () => document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
     assert.equal(document.querySelector('[role="dialog"]'), null)
@@ -108,6 +111,8 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     await React.act(async () => render())
     await React.act(async () => document.querySelector('[data-composer-stat="activity"]').click())
     assert.match(document.querySelector('[role="dialog"]').textContent, /Unavailable/)
+    assert.match(document.querySelector('[role="dialog"]').textContent, /3.3 s/)
+    assert.match(document.querySelector('[role="dialog"]').textContent, /0 ms/)
     assert.match(document.querySelector('[role="dialog"]').textContent, /Stage projection is not available yet/)
     assert.equal(document.querySelector('svg[role="img"]'), null)
     await React.act(async () => document.querySelector('[aria-label="Close session statistics"]').click())
