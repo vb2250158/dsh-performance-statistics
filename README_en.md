@@ -9,7 +9,7 @@ An independent performance statistics plugin for DeepSeek Harness. Click the sta
 Targets the public DSH 0.2.1 plugin APIs; verified with 0.2.1-rc.3. Install this repository through the DSH plugin manager or supported CLI:
 
 ```sh
-dsh plugin --profile web add github:vb2250158/dsh-performance-statistics#v0.1.3
+dsh plugin --profile web add github:vb2250158/dsh-performance-statistics#v0.1.4
 ```
 
 Enable **Performance statistics**, reload the page, send a message, and open the statistics pill after the turn ends. Expand auxiliary call cards or select a pie slice or legend to filter stages.
@@ -28,7 +28,7 @@ Each millisecond belongs to one pie stage. Nested measurements take priority and
 
 Selecting a slice or legend appends its child pie below; selecting a plugin shows its operations. Parent pies remain visible, changing an ancestor clears its previous descendants, and tables are removed. Durations and percentages share one position; measurement descriptions appear below names.
 
-Projection version 4 replays recorded operation labels. Historical enclosing-only intervals remain unidentified. New preprocessing labels require the optional public `agentPreStepTiming` service and the [host instrumentation patch](host-patches/pre-step-timing.patch). Jev-owned operations require Jev 0.1.41 or later. Native probability API requests are measured separately as auxiliary calls, including model, purpose and rules; non-streaming replies have no fabricated first-token timestamp. The patch instruments instructions, skills, session references, time context and optional tmux queries without changing waterfall decisions or the Agent loop.
+Projection version 4 replays recorded operation labels. Historical enclosing-only intervals remain unidentified. Finer cooperative preprocessing labels use the optional public `agentPreStepTiming` service and the [host instrumentation patch](host-patches/pre-step-timing.patch). Jev-owned operations require Jev 0.1.41 or later. Native probability API requests are measured separately as auxiliary calls, including model, purpose and rules; non-streaming replies have no fabricated first-token timestamp. The patch instruments instructions, skills, session references, time context and optional tmux queries without changing waterfall decisions or the Agent loop.
 
 ## Privacy
 
@@ -76,3 +76,5 @@ return ctx.get('agentPreStepTiming')?.run(
 The original task runs when the optional service is absent. Only operation names, timestamps and outcomes are recorded.
 
 Non-streaming auxiliary requests can use `timing.request({ plugin, operation, provider, model, transport: 'native-decisions' }, task)`. It uses the active session position, records the entire request duration and retains neither request nor response contents or an inferred first-token timestamp.
+
+Older hosts also use the public `internal/listener` registration interception for Agents created after this plugin starts. Meters exclude downstream `next()` waits, suppress duplicate cooperative readings, and delegate directly after disposal. Existing listener registries are neither inspected nor rewritten; already registered callbacks cannot be retroactively measured. New sessions can collect timings immediately. The optional host patch supplies finer operation labels.

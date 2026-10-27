@@ -2,14 +2,17 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomUUID } from 'node:crypto'
 import { SESSION_TIMING_KINDS, SESSION_TIMING_RECORD } from './session-timing.js'
+import { installPreStepListenerMeters } from './pre-step-listeners.js'
 
 /** Install scoped stage meters and retain only names, timestamps and outcomes in the log. */
 export function installSessionTimingObserver(ctx, appendPluginRecord = (session, type, data) => session.append(type, data, { ignorable: true })) {
   const context = new AsyncLocalStorage()
   const positions = new Map(), bindings = new Map()
   let warned = false
+  const cooperative = installPreStepListenerMeters(ctx, context, record)
   ctx.effect(() => ctx.provide('agentPreStepTiming', {
     run(position, operation, task) {
+      cooperative(operation.plugin)
       return measure(position, 'preStep', operation.plugin, task, undefined, operation)
     },
   }))

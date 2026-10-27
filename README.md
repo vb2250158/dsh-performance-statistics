@@ -9,7 +9,7 @@ DeepSeek Harness 的独立性能统计插件。点击输入框下方的统计按
 适用于 DSH 0.2.1 系列公开插件 API，已在 0.2.1-rc.3 验证。通过 DSH 的插件管理器安装本仓库，或使用受支持的 CLI：
 
 ```sh
-dsh plugin --profile web add github:vb2250158/dsh-performance-statistics#v0.1.3
+dsh plugin --profile web add github:vb2250158/dsh-performance-statistics#v0.1.4
 ```
 
 安装后启用 **Performance statistics / 性能统计**，重新打开网页。发送一条消息，轮次结束后点击统计按钮；辅助模型卡片可展开，饼图和图例可点击筛选。
@@ -29,7 +29,7 @@ dsh plugin --profile web add github:vb2250158/dsh-performance-statistics#v0.1.3
 
 选中环或图例后，下方追加该环节的插件饼图；继续选中插件可显示操作子饼图。父图始终保留，切换上级会清除旧分支。耗时与本级占比并排显示，口径放在名称下方；不再显示底部明细表。
 
-未记录的内部调用无法事后补采。投影版本 4 会回放已有名称和计时记录；只有外层阶段的旧日志仍标明缺失。新输入预处理的插件及操作名称由可选公开服务 `agentPreStepTiming` 采集，需要宿主的[配套采集点补丁](host-patches/pre-step-timing.patch)，Jev 自有操作需要 0.1.41 或以上；原生概率 API 每次请求会单独计入辅助模型，显示模型、用途与规则，整包返回不虚构首 token。补丁覆盖指令加载、技能读取、会话引用、时间上下文和可选终端查询；不改变瀑布决策，也不修改 Agent 循环。
+未记录的内部调用无法事后补采。投影版本 4 会回放已有名称和计时记录；只有外层阶段的旧日志仍标明缺失。更细的协作式输入预处理名称由可选公开服务 `agentPreStepTiming` 及宿主的[配套采集点补丁](host-patches/pre-step-timing.patch)提供，Jev 自有操作需要 0.1.41 或以上；原生概率 API 每次请求会单独计入辅助模型，显示模型、用途与规则，整包返回不虚构首 token。补丁覆盖指令加载、技能读取、会话引用、时间上下文和可选终端查询；不改变瀑布决策，也不修改 Agent 循环。
 
 ## 隐私
 
@@ -77,3 +77,5 @@ return ctx.get('agentPreStepTiming')?.run(
 显式位置避免全局前置监听器在外层异步上下文之外执行时丢失归属。服务缺失时执行原任务；只保存名称、时间及结果状态。
 
 非流式辅助模型可使用 `timing.request({ plugin, operation, provider, model, transport: 'native-decisions' }, task)`。它从活动异步上下文取得会话位置，记录完整请求耗时，不保存请求和响应内容，也不推算首 token。
+
+旧宿主还可通过公开 `internal/listener` 注册拦截，对统计插件启用后新建的 Agent 采集各组件的自有预处理时间：下游 `next()` 的等待会扣除，协作式计时不会重复记录，卸载后旧包装直接委托。该路径不读取或改写既有监听器列表，已注册的旧回调无法事后补采；新建会话可立即采集。配套宿主补丁提供更细的操作名称。

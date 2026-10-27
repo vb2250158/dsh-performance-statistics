@@ -75,6 +75,8 @@ export const sessionStatisticsLocales = {
 }
 
 const operationCopy = [
+  ['skill-preparation', '技能读取与目录准备', 'Skill loading and catalog preparation'],
+  ['pre-step-listener', '输入预处理回调', 'Input preprocessing listener'],
   ['input-rules', '输入规则处理', 'Input rule processing'],
   ['candidate-source', '候选内容读取与脚本执行', 'Candidate reads and scripts'],
   ['question-provider', '问题生成与脚本执行', 'Question generation and scripts'],
@@ -92,6 +94,8 @@ const operationCopy = [
   ['session-title', '会话标题生成', 'Session title generation'],
 ]
 const operationScopes = [
+  ['skill-preparation', '技能组件自身的目录读取与注入准备，不包含下游处理。', 'Skill catalog reads and injection preparation owned by this component, excluding downstream processing.'],
+  ['pre-step-listener', '此组件自身的输入预处理，扣除调用下游监听器的时间。', 'This component’s own input preparation, excluding time delegated to downstream listeners.'],
   ['skill-snapshot', '查找可用技能、生成目录快照并整理注入内容。', 'Discover available skills, capture their catalog and prepare its injection.'],
   ['skill-invocation', '读取用户指定的技能并准备注入。', 'Load explicitly invoked skills and prepare their injection.'],
   ['instructions-compose', '等待指令投影、读取并整理当前生效的工作区指令。', 'Await instruction projections and load and assemble current workspace instructions.'],

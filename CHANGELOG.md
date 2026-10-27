@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4 — 2026-10-27
+
+- 使用公开监听注册钩子，为旧宿主新建 Agent 补采组件自身的预处理时间，扣除下游等待，不修改既有监听器列表。
+- 新旧采集协同去重，卸载后已有包装直接委托原逻辑。
+- Meter newly registered legacy pre-step listeners through the public registration hook, excluding downstream waits without editing existing registries.
+- Suppress duplicate cooperative readings and preserve delegation after disposal.
+
 ## 0.1.3 — 2026-10-27
 
 - 保留父饼图，选择环节后向下追加插件与操作子饼图，移除底部表格。
