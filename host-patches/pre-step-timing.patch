@@ -1,0 +1,556 @@
+diff --git a/packages/context/agent-instructions/README.md b/packages/context/agent-instructions/README.md
+index 49a66930d6..8f8148f9ac 100644
+--- a/packages/context/agent-instructions/README.md
++++ b/packages/context/agent-instructions/README.md
+@@ -11,6 +11,8 @@ English | [中文](README.zh.md)
+ 
+ `dsh-agent-instructions` gives agents workspace guidance from user-global and project-level `AGENTS.md`-compatible files. It loads the applicable chain for the first request. It does not watch external edits continuously: successful filesystem operations discover newly relevant nested files and make later changes or removals visible, while session resume reconciles the baseline. `dsh-base` enables this behavior by default, while profiles can disable it. A byte budget bounds the user-global chain and the project chain separately: within each chain, broader files are omitted before the most specific file is truncated, and an empty chain adds nothing.
+ 
++An optional `agentPreStepTiming` provider can measure this plugin's own pre-step work; downstream listeners are excluded. See the [Agent timing API](../../core/agent/README.md).
++
+ ## Table of Contents
+ 
+ - [Use this package](#use-this-package)
+diff --git a/packages/context/agent-instructions/README.zh.md b/packages/context/agent-instructions/README.zh.md
+index b584ccac1f..8da1c2b381 100644
+--- a/packages/context/agent-instructions/README.zh.md
++++ b/packages/context/agent-instructions/README.zh.md
+@@ -237,3 +237,5 @@ The previously loaded instructions from this file no longer apply.
+ 无。
+ 
+ </details>
++
++可选 `agentPreStepTiming` 提供方可测量本插件自身的输入预处理，不包含下游监听器的执行时间；参见 [Agent 计时接口](../../core/agent/README.zh.md)。
+diff --git a/packages/context/agent-instructions/src/index.ts b/packages/context/agent-instructions/src/index.ts
+index ec752e0715..fdbea5d858 100644
+--- a/packages/context/agent-instructions/src/index.ts
++++ b/packages/context/agent-instructions/src/index.ts
+@@ -328,31 +328,35 @@ export function apply(ctx: Context, config: Config): void {
+   })
+ 
+   ctx.on('agent/pre-step', async (
+-    { agent, messages, step, signal },
++    { agent, messages, turn, step, signal },
+     next,
+   ): Promise<PreStepDecision> => {
+     const decision = await next()
+-    await waitForProjections(agent)
+-    const pending = agent.inbox.nextStep.filter(isAgentInstructionsMessage)
+-    const desired = await compose(agent, signal, messages, pending)
+-    signal.throwIfAborted()
+-    // An empty first entry owns a no-step turn; keep context pending instead
+-    // of turning it into a standalone request. Later entries may be tool continuations.
+-    if (decision.kind === 'reject' || (step === 1 && decision.messages.length === 0)) {
+-      syncInbox(agent, messages, desired)
+-      return decision
+-    }
+-    // A proceeding step settles the pending context: it either enters below as
+-    // `desired`, or its payload is already covered by the batch, so nothing stays pending.
+-    for (const message of pending) agent.inbox.remove(message.id)
+-    if (desired === undefined || decision.messages.some(message => sameContextPayload(message, desired))) {
+-      return decision
++    const work = async (): Promise<PreStepDecision> => {
++      await waitForProjections(agent)
++      const pending = agent.inbox.nextStep.filter(isAgentInstructionsMessage)
++      const desired = await compose(agent, signal, messages, pending)
++      signal.throwIfAborted()
++      // An empty first entry owns a no-step turn; keep context pending instead
++      // of turning it into a standalone request. Later entries may be tool continuations.
++      if (decision.kind === 'reject' || (step === 1 && decision.messages.length === 0)) {
++        syncInbox(agent, messages, desired)
++        return decision
++      }
++      // A proceeding step settles the pending context: it either enters below as
++      // `desired`, or its payload is already covered by the batch, so nothing stays pending.
++      for (const message of pending) agent.inbox.remove(message.id)
++      if (desired === undefined || decision.messages.some(message => sameContextPayload(message, desired))) {
++        return decision
++      }
++      // Fold the context right after the claimed batch, so the direct prompt
++      // precedes it and the driver-appended runtime context follows it.
++      const lastClaimedIndex = decision.messages.findLastIndex(message => messages.includes(message))
++      const entered = decision.messages.toSpliced(lastClaimedIndex + 1, 0, desired)
++      return { ...decision, messages: entered }
+     }
+-    // Fold the context right after the claimed batch, so the direct prompt
+-    // precedes it and the driver-appended runtime context follows it.
+-    const lastClaimedIndex = decision.messages.findLastIndex(message => messages.includes(message))
+-    const entered = decision.messages.toSpliced(lastClaimedIndex + 1, 0, desired)
+-    return { ...decision, messages: entered }
++    return ctx.get('agentPreStepTiming')?.run({ agent, turn, step },
++      { plugin: '@deepseek-ai/dsh-agent-instructions', operation: 'instructions-compose' }, work) ?? work()
+   })
+ 
+   ctx.on('tools/result', (exec: ToolExecution, result: ToolExecutionResult) => {
+diff --git a/packages/context/session-reference/README.md b/packages/context/session-reference/README.md
+index 7c737c8b12..10f19ba77a 100644
+--- a/packages/context/session-reference/README.md
++++ b/packages/context/session-reference/README.md
+@@ -11,6 +11,8 @@ English | [中文](README.zh.md)
+ 
+ `dsh-session-reference` lets a conversation reference other sessions: a host turns a `@label` mention into a canonical URI, and the service prepares a bounded, read-only snapshot of each referenced session as durable, untrusted background context for the model. Candidate discovery ranks other sessions by working-directory affinity and labels them with their latest titles. Snapshots are immutable after capture and carry a fixed warning that forbids following instructions, permission claims, or tool requests inside them. It is an opt-in service for hosts that support cross-session mentions; it consumes `ctx.sessionQuery` and needs no SQLite FTS.
+ 
++An optional `agentPreStepTiming` provider can measure this plugin's own pre-step work; downstream listeners are excluded. See the [Agent timing API](../../core/agent/README.md).
++
+ ## Table of Contents
+ 
+ - [Use this package](#use-this-package)
+diff --git a/packages/context/session-reference/README.zh.md b/packages/context/session-reference/README.zh.md
+index bdbcdf4092..687955f8f6 100644
+--- a/packages/context/session-reference/README.zh.md
++++ b/packages/context/session-reference/README.zh.md
+@@ -145,3 +145,5 @@ kind: "package-reference"
+ 无。
+ 
+ </details>
++
++可选 `agentPreStepTiming` 提供方可测量本插件自身的输入预处理，不包含下游监听器的执行时间；参见 [Agent 计时接口](../../core/agent/README.zh.md)。
+diff --git a/packages/context/session-reference/src/index.ts b/packages/context/session-reference/src/index.ts
+index 3e909ae25e..6ae4265c6b 100644
+--- a/packages/context/session-reference/src/index.ts
++++ b/packages/context/session-reference/src/index.ts
+@@ -125,13 +125,15 @@ export class SessionReferenceResolver extends TypertRemoteService {
+         'SESSION_REFERENCE_INVALID_CONFIG',
+       )
+     }
+-    ctx.on('agent/pre-step', async ({ agent, signal, modelSelection }, next): Promise<PreStepDecision> => {
++    ctx.on('agent/pre-step', async ({ agent, turn, step, signal, modelSelection }, next): Promise<PreStepDecision> => {
+       const decision = await next()
+       if (decision.kind === 'reject') return decision
+-      return {
++      const work = async (): Promise<PreStepDecision> => ({
+         ...decision,
+         messages: await this.prepareDirectMessages(agent, decision.messages, modelSelection, signal),
+-      }
++      })
++      return ctx.get('agentPreStepTiming')?.run({ agent, turn, step },
++        { plugin: '@deepseek-ai/dsh-session-reference', operation: 'session-references' }, work) ?? work()
+     }, { prepend: true })
+   }
+ 
+diff --git a/packages/context/time-context/README.md b/packages/context/time-context/README.md
+index 225d8e05b5..1de9d332bd 100644
+--- a/packages/context/time-context/README.md
++++ b/packages/context/time-context/README.md
+@@ -11,6 +11,8 @@ English | [中文](README.zh.md)
+ 
+ `dsh-time-context` gives the model a clock: on eligible steps it appends a durable, source-attributed reading with the current time, the browser zone attached to the open request, and the elapsed time since the preceding model-visible message. It helps the model interpret otherwise-unqualified dates and times in the user's browser zone, and tells it to ask when current-turn browser zones are mixed or missing. The shipped Web composition carries no row for it; `standard`, `cordis`, and `ptc` declare it. Readings default to a 10-minute minimum interval; `refreshIntervalMs: 0` injects at every eligible step.
+ 
++An optional `agentPreStepTiming` provider can measure this plugin's own pre-step work; downstream listeners are excluded. See the [Agent timing API](../../core/agent/README.md).
++
+ ## Table of Contents
+ 
+ - [Use this package](#use-this-package)
+diff --git a/packages/context/time-context/README.zh.md b/packages/context/time-context/README.zh.md
+index 09afe4cd03..6a0b083b55 100644
+--- a/packages/context/time-context/README.zh.md
++++ b/packages/context/time-context/README.zh.md
+@@ -151,3 +151,5 @@ Elapsed since the preceding step context: <duration-or-unavailable>.
+ 无。
+ 
+ </details>
++
++可选 `agentPreStepTiming` 提供方可测量本插件自身的输入预处理，不包含下游监听器的执行时间；参见 [Agent 计时接口](../../core/agent/README.zh.md)。
+diff --git a/packages/context/time-context/src/index.ts b/packages/context/time-context/src/index.ts
+index 160beb9e8a..d3c6d2aa75 100644
+--- a/packages/context/time-context/src/index.ts
++++ b/packages/context/time-context/src/index.ts
+@@ -200,45 +200,51 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
+     { agent, turn, step, signal },
+     next,
+   ): Promise<PreStepDecision> => {
+-    const timeContextProjectionHandle = await projectionReady
++    const ready = () => projectionReady
++    const timeContextProjectionHandle = await (ctx.get('agentPreStepTiming')?.run({ agent, turn, step },
++      { plugin: '@deepseek-ai/dsh-time-context', operation: 'projection-ready' }, ready) ?? ready())
+     ctx.fiber.assertActive()
+     const decision = await next()
+-    if (decision.kind === 'reject' || signal.aborted) return decision
+-    const now = Date.now()
+-    const state = timeContextProjectionHandle.stateOf(agent.session)
+-    if (refreshIntervalMs > 0) {
+-      const lastInjection = state.lastInjectionTime
+-      if (lastInjection != null
+-        && now >= lastInjection
+-        && now - lastInjection < refreshIntervalMs) return decision
+-    }
+-    /* v8 ignore next 3 -- every later step follows a recorded injection in the same turn */
+-    const previous = step === 1
+-      ? state.lastMessageTime ?? undefined
+-      : state.lastTurnInjectionTime ?? undefined
+-    const browser = state.browserTurn === turn
+-      ? deriveBrowserTimeZoneContext(decision.messages, state.browserTimeZones)
+-      : deriveBrowserTimeZoneContext(requestMessages(agent, turn, decision.messages))
+-    const selectedTimeZone = browser.kind === 'resolved' ? browser.timeZone : fallbackTimeZone
+-    const text = renderText(
+-      now,
+-      turn,
+-      step,
+-      previous,
+-      formatterFor(selectedTimeZone),
+-      selectedTimeZone,
+-      browser,
+-    )
+-    return {
+-      ...decision,
+-      messages: [
+-        ...decision.messages,
+-        createUserMessage({
+-          content: [{ type: 'text', text }],
+-          source: { kind: name, form: 'snapshot', sections: [{ name, text }] },
+-        }),
+-      ],
++    const work = async (): Promise<PreStepDecision> => {
++      if (decision.kind === 'reject' || signal.aborted) return decision
++      const now = Date.now()
++      const state = timeContextProjectionHandle.stateOf(agent.session)
++      if (refreshIntervalMs > 0) {
++        const lastInjection = state.lastInjectionTime
++        if (lastInjection != null
++          && now >= lastInjection
++          && now - lastInjection < refreshIntervalMs) return decision
++      }
++      /* v8 ignore next 3 -- every later step follows a recorded injection in the same turn */
++      const previous = step === 1
++        ? state.lastMessageTime ?? undefined
++        : state.lastTurnInjectionTime ?? undefined
++      const browser = state.browserTurn === turn
++        ? deriveBrowserTimeZoneContext(decision.messages, state.browserTimeZones)
++        : deriveBrowserTimeZoneContext(requestMessages(agent, turn, decision.messages))
++      const selectedTimeZone = browser.kind === 'resolved' ? browser.timeZone : fallbackTimeZone
++      const text = renderText(
++        now,
++        turn,
++        step,
++        previous,
++        formatterFor(selectedTimeZone),
++        selectedTimeZone,
++        browser,
++      )
++      return {
++        ...decision,
++        messages: [
++          ...decision.messages,
++          createUserMessage({
++            content: [{ type: 'text', text }],
++            source: { kind: name, form: 'snapshot', sections: [{ name, text }] },
++          }),
++        ],
++      }
+     }
++    return ctx.get('agentPreStepTiming')?.run({ agent, turn, step },
++      { plugin: '@deepseek-ai/dsh-time-context', operation: 'time-context' }, work) ?? work()
+   }, { prepend: true })
+   await projectionReady
+ }
+diff --git a/packages/context/tmux-context/README.md b/packages/context/tmux-context/README.md
+index b2434f0321..e1d60ef785 100644
+--- a/packages/context/tmux-context/README.md
++++ b/packages/context/tmux-context/README.md
+@@ -11,6 +11,8 @@ English | [中文](README.zh.md)
+ 
+ `dsh-tmux-context` lets the model identify the tmux session, window, pane, and pane-tree layout containing its agent process. It adds a durable, source-attributed reading on the first step of a turn only when that location changed. Terminals that merely inherit tmux environment variables without running in the named pane add nothing; failed queries also add nothing and do not fail the turn. This package is opt-in and is not included in the shipped Web or headless profiles.
+ 
++An optional `agentPreStepTiming` provider can measure this plugin's own pre-step work; downstream listeners are excluded. See the [Agent timing API](../../core/agent/README.md).
++
+ ## Table of Contents
+ 
+ - [Use this package](#use-this-package)
+diff --git a/packages/context/tmux-context/README.zh.md b/packages/context/tmux-context/README.zh.md
+index 9076c11224..8c46693450 100644
+--- a/packages/context/tmux-context/README.zh.md
++++ b/packages/context/tmux-context/README.zh.md
+@@ -140,3 +140,5 @@ window active=<0|1>, pane active=<0|1>, layout <window-layout>
+ 无。
+ 
+ </details>
++
++可选 `agentPreStepTiming` 提供方可测量本插件自身的输入预处理，不包含下游监听器的执行时间；参见 [Agent 计时接口](../../core/agent/README.zh.md)。
+diff --git a/packages/context/tmux-context/src/index.ts b/packages/context/tmux-context/src/index.ts
+index 9e3b69d8b0..a42ad0c960 100644
+--- a/packages/context/tmux-context/src/index.ts
++++ b/packages/context/tmux-context/src/index.ts
+@@ -241,32 +241,38 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
+     { agent, turn, step, signal },
+     next,
+   ): Promise<PreStepDecision> => {
+-    const tmuxContextProjectionHandle = await projectionReady
++    const ready = () => projectionReady
++    const tmuxContextProjectionHandle = await (ctx.get('agentPreStepTiming')?.run({ agent, turn, step },
++      { plugin: '@deepseek-ai/dsh-tmux-context', operation: 'projection-ready' }, ready) ?? ready())
+     ctx.fiber.assertActive()
+     const decision = await next()
+-    if (decision.kind === 'reject' || signal.aborted || step !== 1) return decision
+-    const bash = ctx.get('shell')
+-    if (bash === undefined) return decision
+-    const previous = tmuxContextProjectionHandle.stateOf(agent.session)
+-    if (refreshIntervalMs !== undefined && refreshIntervalMs > 0 && previous !== null) {
+-      const now = Date.now()
+-      if (now >= previous.time && now - previous.time < refreshIntervalMs) return decision
+-    }
+-    const location = await queryTmuxLocation(bash, ctx.logger, process.pid, signal)
+-    if (location === undefined) return decision
+-    const state = renderState(location)
+-    if (previous !== null && previous.state === state) return decision
+-    const text = renderReading(location, turn)
+-    return {
+-      ...decision,
+-      messages: [
+-        createUserMessage({
+-          content: [{ type: 'text', text }],
+-          source: { kind: name, form: 'snapshot', sections: [{ name, text }] },
+-        }),
+-        ...decision.messages,
+-      ],
++    const work = async (): Promise<PreStepDecision> => {
++      if (decision.kind === 'reject' || signal.aborted || step !== 1) return decision
++      const bash = ctx.get('shell')
++      if (bash === undefined) return decision
++      const previous = tmuxContextProjectionHandle.stateOf(agent.session)
++      if (refreshIntervalMs !== undefined && refreshIntervalMs > 0 && previous !== null) {
++        const now = Date.now()
++        if (now >= previous.time && now - previous.time < refreshIntervalMs) return decision
++      }
++      const location = await queryTmuxLocation(bash, ctx.logger, process.pid, signal)
++      if (location === undefined) return decision
++      const state = renderState(location)
++      if (previous !== null && previous.state === state) return decision
++      const text = renderReading(location, turn)
++      return {
++        ...decision,
++        messages: [
++          createUserMessage({
++            content: [{ type: 'text', text }],
++            source: { kind: name, form: 'snapshot', sections: [{ name, text }] },
++          }),
++          ...decision.messages,
++        ],
++      }
+     }
++    return ctx.get('agentPreStepTiming')?.run({ agent, turn, step },
++      { plugin: '@deepseek-ai/dsh-tmux-context', operation: 'tmux-query' }, work) ?? work()
+   }, { prepend: true })
+   await projectionReady
+ }
+diff --git a/packages/core/agent/README.md b/packages/core/agent/README.md
+index 8b9275e220..21acfada31 100644
+--- a/packages/core/agent/README.md
++++ b/packages/core/agent/README.md
+@@ -11,6 +11,8 @@ English | [中文](README.zh.md)
+ 
+ Use `dsh-agent` to create or resume live agents, send follow-up or steering input, inject model-facing context, cancel work, and wait for idle completion. Plugins, UI, hooks, and orchestrators can also observe or intercept agent activity and apply capabilities to one agent without affecting others. Choose it when code needs to control or extend live agents through the public `Agent` API. Pair it with an agent driver such as `dsh-agent-loop`; this package does not create model requests by itself. Initiator attribution is process-local and must be carried explicitly across workers, processes, durable queues, and restarts.
+ 
++The optional `agentPreStepTiming.run(position, operation, task)` service measures a pre-step provider's own asynchronous work. Providers delegate with `next()` before timing their work and pass the owning Agent, turn and step explicitly. The timing provider preserves results and errors and records names and elapsed time without task inputs or outputs. Without a timing provider, consumers execute their original task directly.
++
+ ## Table of Contents
+ 
+ - [Use this package](#use-this-package)
+diff --git a/packages/core/agent/README.zh.md b/packages/core/agent/README.zh.md
+index 28b2c01b7b..b674c296ba 100644
+--- a/packages/core/agent/README.zh.md
++++ b/packages/core/agent/README.zh.md
+@@ -227,3 +227,5 @@ await handle.agent.whenIdle()
+ 本开发备注是维护者的工作上下文；它明确不具权威性。尚未决定的开放方向：委派之外的 agent 间通道——共享状态、流式子输出以及后台或轮询语义仍不在当前委派 seam 之内；以及 `SessionStartSource` 的 `'clear'`/`'compact'` 值已保留但尚无发出方，待驱动子系统落地。
+ 
+ </details>
++
++可选 `agentPreStepTiming.run(position, operation, task)` 服务用于测量预处理提供方自己的异步工作。提供方先通过 `next()` 委托下游，再测量自有操作，并显式传入 Agent、轮次与步骤。计时提供方保留结果和错误，只记录名称与耗时，不记录任务输入或输出；服务缺失时，消费者直接执行原任务。
+diff --git a/packages/core/agent/src/runtime-types.ts b/packages/core/agent/src/runtime-types.ts
+index 9d13024a1c..41a7fb8a98 100644
+--- a/packages/core/agent/src/runtime-types.ts
++++ b/packages/core/agent/src/runtime-types.ts
+@@ -15,6 +15,28 @@ export type { AgentCancelCause } from '@deepseek-ai/dsh-session'
+ import type { Agent, InboxTarget, ModelSelection } from './types.ts'
+ export type { Agent } from './types.ts'
+ import type {} from '@deepseek-ai/dsh-system-prompt'
++
++/** Optional elapsed-time instrumentation for a pre-step provider's own work. */
++export interface AgentPreStepTiming {
++  /**
++   * Measure one operation, excluding delegation to downstream pre-step listeners.
++   * Implementations preserve the task's result and rejection, including recording failures.
++   * @param position - owning agent and current turn/step.
++   * @param operation - public plugin and operation names; never input contents.
++   * @param task - provider-owned work to execute once.
++   * @returns the task's result.
++   */
++  run<T>(position: { agent: Agent; turn: number; step: number },
++    operation: { plugin: string; operation: string }, task: () => Promise<T>): Promise<T>
++}
++
++declare module '@deepseek-ai/cordis' {
++  interface Context {
++    /** Optional provider of named pre-step operation timings. */
++    agentPreStepTiming: AgentPreStepTiming
++  }
++}
++
+ declare module '@deepseek-ai/dsh-system-prompt' {
+   interface AssembleContext {
+     /** Agent for this assembly; absent on diagnostics. When present, `scope` must identify the same agent. */
+diff --git a/packages/skill/tool-skill/README.md b/packages/skill/tool-skill/README.md
+index fa342799a1..f447d74384 100644
+--- a/packages/skill/tool-skill/README.md
++++ b/packages/skill/tool-skill/README.md
+@@ -11,6 +11,8 @@ English | [中文](README.zh.md)
+ 
+ Agents can discover and load skills during a session. Before the first request, when model-invocable skills exist and the `skill` tool is visible, they receive a durable catalog of available skill names and capped descriptions, and can use the `skill` tool to load full instructions. Users can invoke a user-invocable skill with `/name`, which injects the same instructions into that step. Catalog changes append a complete replacement, including an empty catalog that retires old names; configure `catalogDescriptionMaxLength` to limit each description.
+ 
++An optional `agentPreStepTiming` provider can measure this plugin's own pre-step work; downstream listeners are excluded. See the [Agent timing API](../../core/agent/README.md).
++
+ ## Table of Contents
+ 
+ - [Use this package](#use-this-package)
+diff --git a/packages/skill/tool-skill/README.zh.md b/packages/skill/tool-skill/README.zh.md
+index 3522ed4be7..4ba75f5047 100644
+--- a/packages/skill/tool-skill/README.zh.md
++++ b/packages/skill/tool-skill/README.zh.md
+@@ -257,3 +257,5 @@ Load referenced resources only as needed.
+ 无。
+ 
+ </details>
++
++可选 `agentPreStepTiming` 提供方可测量本插件自身的输入预处理，不包含下游监听器的执行时间；参见 [Agent 计时接口](../../core/agent/README.zh.md)。
+diff --git a/packages/skill/tool-skill/src/index.ts b/packages/skill/tool-skill/src/index.ts
+index 243ef108a9..ee8efedb10 100644
+--- a/packages/skill/tool-skill/src/index.ts
++++ b/packages/skill/tool-skill/src/index.ts
+@@ -177,32 +177,36 @@ export function apply(ctx: Context, config: Config = {}): void {
+   // This is the only entry point for `disable-model-invocation` skills; the
+   // catalog and the `skill` tool below never see them.
+   ctx.on('agent/pre-step', async (
+-    { agent, messages, signal },
++    { agent, messages, turn, step, signal },
+     next,
+   ): Promise<PreStepDecision> => {
+     const decision = await next()
+-    if (decision.kind === 'reject') return decision
+-    const names = invokedSkillNames(messages)
+-    if (names.length === 0) return decision
+-    signal.throwIfAborted()
+-    const lookup = { cwd: await ctx.workingDirectory.ensure(agent, signal), signal, scope: agent }
+-    const injections: UserMessage[] = []
+-    for (const name of names) {
+-      const skill = await ctx.skills.get(name, lookup)
++    const work = async (): Promise<PreStepDecision> => {
++      if (decision.kind === 'reject') return decision
++      const names = invokedSkillNames(messages)
++      if (names.length === 0) return decision
+       signal.throwIfAborted()
+-      // Unknown names and user-disabled skills stay plain prose: the
+-      // gesture was never a claim this boundary recognizes. The check sits
+-      // on the loaded definition — the single lookup that produces what is
+-      // actually injected.
+-      if (skill === undefined || !isUserInvocable(skill)) continue
+-      const source: SkillInvocationSource = { kind: 'skill-invocation', name, form: 'instructions' }
+-      injections.push(createUserMessage({
+-        content: [{ type: 'text', text: renderSkillContent(skill) }],
+-        source,
+-      }))
++      const lookup = { cwd: await ctx.workingDirectory.ensure(agent, signal), signal, scope: agent }
++      const injections: UserMessage[] = []
++      for (const name of names) {
++        const skill = await ctx.skills.get(name, lookup)
++        signal.throwIfAborted()
++        // Unknown names and user-disabled skills stay plain prose: the
++        // gesture was never a claim this boundary recognizes. The check sits
++        // on the loaded definition — the single lookup that produces what is
++        // actually injected.
++        if (skill === undefined || !isUserInvocable(skill)) continue
++        const source: SkillInvocationSource = { kind: 'skill-invocation', name, form: 'instructions' }
++        injections.push(createUserMessage({
++          content: [{ type: 'text', text: renderSkillContent(skill) }],
++          source,
++        }))
++      }
++      if (injections.length === 0) return decision
++      return { ...decision, messages: [...decision.messages, ...injections] }
+     }
+-    if (injections.length === 0) return decision
+-    return { ...decision, messages: [...decision.messages, ...injections] }
++    return ctx.get('agentPreStepTiming')?.run({ agent, turn, step },
++      { plugin: '@deepseek-ai/dsh-tool-skill', operation: 'skill-invocation' }, work) ?? work()
+   })
+ 
+   // Register after the tool so reverse teardown removes guidance first. Exact definition
+@@ -213,43 +217,47 @@ export function apply(ctx: Context, config: Config = {}): void {
+   // scope, so a plugin mounted inside an agent preset registers for that agent
+   // alone and an unscoped lookup correctly finds nothing.
+   ctx.on('agent/pre-step', async (
+-    { agent, signal },
++    { agent, turn, step, signal },
+     next,
+   ): Promise<PreStepDecision> => {
+     const decision = await next()
+-    if (decision.kind === 'reject') return decision
+-    signal.throwIfAborted()
+-    const toolVisible = ctx.tools.get(skillTool.name, agent) === skillTool
+-    const snapshot = toolVisible
+-      ? await ctx.skills.snapshot({ cwd: await ctx.workingDirectory.ensure(agent, signal), signal, scope: agent })
+-      : { skills: [], complete: true }
+-    signal.throwIfAborted()
+-    if (!snapshot.complete) return decision
+-    const skills = snapshot.skills.filter(isModelInvocable)
+-    const entries = catalogSourceEntries(skills, catalogDescriptionMaxLength)
+-    const digest = digestCatalogEntries(entries)
+-    const history = catalogHistory(agent)
+-    const existing = catalogMessage(decision.messages)
+-    if (history.visibleDigest === digest) {
+-      return existing === undefined
+-        ? decision
+-        : { ...decision, messages: decision.messages.filter(message => message.id !== existing.message.id) }
+-    }
+-    if (existing !== undefined && digestCatalogEntries(existing.entries) === digest) return decision
+-    if (!history.published && skills.length === 0) {
+-      return existing === undefined
+-        ? decision
+-        : { ...decision, messages: decision.messages.filter(message => message.id !== existing.message.id) }
+-    }
+-    const catalog = history.published
+-      ? renderCatalogUpdate(entries)
+-      : renderCatalogMessage(entries)
+-    return {
+-      ...decision,
+-      messages: existing === undefined
+-        ? [...decision.messages, catalog]
+-        : decision.messages.map(message => message.id === existing.message.id ? catalog : message),
++    const work = async (): Promise<PreStepDecision> => {
++      if (decision.kind === 'reject') return decision
++      signal.throwIfAborted()
++      const toolVisible = ctx.tools.get(skillTool.name, agent) === skillTool
++      const snapshot = toolVisible
++        ? await ctx.skills.snapshot({ cwd: await ctx.workingDirectory.ensure(agent, signal), signal, scope: agent })
++        : { skills: [], complete: true }
++      signal.throwIfAborted()
++      if (!snapshot.complete) return decision
++      const skills = snapshot.skills.filter(isModelInvocable)
++      const entries = catalogSourceEntries(skills, catalogDescriptionMaxLength)
++      const digest = digestCatalogEntries(entries)
++      const history = catalogHistory(agent)
++      const existing = catalogMessage(decision.messages)
++      if (history.visibleDigest === digest) {
++        return existing === undefined
++          ? decision
++          : { ...decision, messages: decision.messages.filter(message => message.id !== existing.message.id) }
++      }
++      if (existing !== undefined && digestCatalogEntries(existing.entries) === digest) return decision
++      if (!history.published && skills.length === 0) {
++        return existing === undefined
++          ? decision
++          : { ...decision, messages: decision.messages.filter(message => message.id !== existing.message.id) }
++      }
++      const catalog = history.published
++        ? renderCatalogUpdate(entries)
++        : renderCatalogMessage(entries)
++      return {
++        ...decision,
++        messages: existing === undefined
++          ? [...decision.messages, catalog]
++          : decision.messages.map(message => message.id === existing.message.id ? catalog : message),
++      }
+     }
++    return ctx.get('agentPreStepTiming')?.run({ agent, turn, step },
++      { plugin: '@deepseek-ai/dsh-tool-skill', operation: 'skill-snapshot' }, work) ?? work()
+   })
+ }
+ 

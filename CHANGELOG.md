@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.3 — 2026-10-27
+
+- 保留父饼图，选择环节后向下追加插件与操作子饼图，移除底部表格。
+- 耗时和本级占比并排显示，口径合并到图例第二行。
+- 投影版本 4 分配独占操作耗时，避免嵌套和并行请求重复计算；附带宿主预处理采集补丁。
+- Keep parent pies and append plugin/operation pies on selection; remove tables.
+- Place durations beside percentages and descriptions below labels.
+- Partition exclusive operation time in projection version 4 and ship optional host preprocessing instrumentation.
+
 ## 0.1.2 — 2026-10-27
 
 - 选择阶段时展示该阶段内记录的操作、辅助模型与钩子，避免继续显示无关的全会话明细。

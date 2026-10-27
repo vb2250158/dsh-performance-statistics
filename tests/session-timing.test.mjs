@@ -3,6 +3,8 @@ import test from 'node:test'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { performance } from 'node:perf_hooks'
+import { readFileSync } from 'node:fs'
+import { sessionBreakdown } from '../src/session-breakdown.js'
 import { createSessionTimingProjection, exclusiveSessionTimings, SESSION_TIMING_RECORD, LEGACY_SESSION_TIMING_RECORD } from '../src/session-timing.js'
 
 const require = process.env.DSH_SOURCE_ROOT
@@ -19,6 +21,21 @@ const message = (time, first, type = 'text-chunks') => event('assistant/message'
 })
 const fold = events => events.reduce((state, row) => projection.stateSchema.parse(projection.apply(state, row)), projection.init())
 const total = view => Object.values(view.phases).reduce((sum, value) => sum + value, 0)
+
+test('recorded preprocessing replays into named child pies and a separate native request', () => {
+  const { view } = fold([event('turn/start', 0),
+    span('preStep', 10, 50, { id: 'skills', plugin: 'skills', operation: 'skill-snapshot' }),
+    span('auxiliaryModel', 40, 70, { id: 'native', role: 'auxiliary', transport: 'native-decisions',
+      plugin: 'dsh-jev-context-gate', operation: 'before', provider: 'fixture', model: 'native' }),
+    span('preStep', 80, 90, { id: 'instructions', plugin: 'instructions', operation: 'instructions-compose' }),
+    span('preStep', 1, 99, { id: 'stage' }), event('turn/end', 100)])
+  const snapshot = { closedMs: view.closedMs, phases: view.phases,
+    calls: view.calls.map(({ plugin, operation, transport, role }) => ({ plugin, operation, transport, role })),
+    pies: sessionBreakdown(view).map(node => ({ key: node.key, milliseconds: node.milliseconds,
+      children: node.children.map(child => ({ key: child.key, milliseconds: child.milliseconds,
+        operations: child.children.map(operation => operation.key) })) })) }
+  assert.deepEqual(snapshot, JSON.parse(readFileSync(new URL('./expected/preprocessing-pies.json', import.meta.url), 'utf8')))
+})
 
 test('legacy and standalone records contribute to one projection without rewriting history', () => {
   const legacy = { ...span('auxiliaryModel', 10, 40, { role: 'auxiliary', detail: 'legacy/judge' }), type: LEGACY_SESSION_TIMING_RECORD }

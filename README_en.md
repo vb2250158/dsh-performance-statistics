@@ -9,7 +9,7 @@ An independent performance statistics plugin for DeepSeek Harness. Click the sta
 Targets the public DSH 0.2.1 plugin APIs; verified with 0.2.1-rc.3. Install this repository through the DSH plugin manager or supported CLI:
 
 ```sh
-dsh plugin --profile web add github:vb2250158/dsh-performance-statistics#v0.1.2
+dsh plugin --profile web add github:vb2250158/dsh-performance-statistics#v0.1.3
 ```
 
 Enable **Performance statistics**, reload the page, send a message, and open the statistics pill after the turn ends. Expand auxiliary call cards or select a pie slice or legend to filter stages.
@@ -22,13 +22,13 @@ No historical log conversion is needed. The plugin reads legacy `plugin:dsh-chat
 
 The stage breakdown covers input and prompt preparation, model selection, preprocessing, request preparation, context checks and finalization, auxiliary requests, first-token wait, reasoning/answer/tool-argument output, stream and message commit, tool dispatch/checks/execution/postprocessing, result commit, step transitions, turn stopping, compaction, Rabi hooks and retries.
 
-Each auxiliary call shows its plugin, purpose, configured rule names and IDs, route, start time, total duration, first-token wait, time after the first token, and failure or cancellation state. Tool and hook names appear in the independent operation table.
+Each auxiliary call shows its plugin, purpose, configured rule names and IDs, route, start time, total duration, first-token wait, time after the first token, and failure or cancellation state. Tool and hook names appear in child pies.
 
-Each millisecond belongs to one pie stage. Nested measurements take priority and parallel tool intervals contribute their union. Independent operation totals can overlap and must not be summed as turn time. Whole-log totals cover completed turns; active turns appear when they finish. First-output wait starts at turn start, includes preparation and reasoning fragments, and excludes time before enqueueing and browser painting.
+Each millisecond belongs to one pie stage. Nested measurements take priority and parallel tool intervals contribute their union. Child pies partition the same exclusive elapsed time; children and unrecorded time sum to their parent. Whole-log totals cover completed turns; active turns appear when they finish. First-output wait starts at turn start, includes preparation and reasoning fragments, and excludes time before enqueueing and browser painting.
 
-Old logs can reconstruct only existing event boundaries. Unrecorded internal calls cannot be recovered; unlabelled callers remain unlabelled. Some preprocessing can still have only an enclosing stage until the corresponding plugin supplies finer timing. Purposes are never inferred from prompt contents.
+Selecting a slice or legend appends its child pie below; selecting a plugin shows its operations. Parent pies remain visible, changing an ancestor clears its previous descendants, and tables are removed. Durations and percentages share one position; measurement descriptions appear below names.
 
-Selecting preprocessing or another stage shows its recorded internal operations, nested auxiliary requests and hooks. If only the stage boundary exists, the dialog explicitly reports missing plugin or substep attribution. Internal operations can overlap or belong to separate pie stages and must not be summed as the selected stage's exclusive time. Projection version 3 replays historical records without rewriting Sessions.
+Projection version 4 replays recorded operation labels. Historical enclosing-only intervals remain unidentified. New preprocessing labels require the optional public `agentPreStepTiming` service and the [host instrumentation patch](host-patches/pre-step-timing.patch). Jev-owned operations require Jev 0.1.41 or later. Native probability API requests are measured separately as auxiliary calls, including model, purpose and rules; non-streaming replies have no fabricated first-token timestamp. The patch instruments instructions, skills, session references, time context and optional tmux queries without changing waterfall decisions or the Agent loop.
 
 ## Privacy
 
@@ -62,3 +62,17 @@ Inside an active Agent stage, non-model tasks can use `timing.run({ plugin: 'my-
 Labels travel through async context independently of provider options. Iteration preserves chunks, cancellation and errors. Public global events observe Agent-local model calls without requiring a root model service. Records use the actual Session instance's public `append` compatibility entry to avoid private-member mismatches across installed Session classes.
 
 Extracted from [dsh-chat-enhancement](https://github.com/vb2250158/dsh-chat-enhancement) under its MIT license.
+
+Pre-step providers can record their own work after delegation, including listeners outside the enclosing async context:
+
+```js
+const decision = await next()
+const work = () => prepareInput(decision)
+return ctx.get('agentPreStepTiming')?.run(
+  { agent, turn, step }, { plugin: 'my-plugin', operation: 'input-loading' }, work,
+) ?? work()
+```
+
+The original task runs when the optional service is absent. Only operation names, timestamps and outcomes are recorded.
+
+Non-streaming auxiliary requests can use `timing.request({ plugin, operation, provider, model, transport: 'native-decisions' }, task)`. It uses the active session position, records the entire request duration and retains neither request nor response contents or an inferred first-token timestamp.

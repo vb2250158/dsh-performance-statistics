@@ -8,8 +8,19 @@ export function installSessionTimingObserver(ctx, appendPluginRecord = (session,
   const context = new AsyncLocalStorage()
   const positions = new Map(), bindings = new Map()
   let warned = false
+  ctx.effect(() => ctx.provide('agentPreStepTiming', {
+    run(position, operation, task) {
+      return measure(position, 'preStep', operation.plugin, task, undefined, operation)
+    },
+  }))
   // Callers supply operation names separately from model inputs and transport options.
   ctx.effect(() => ctx.provide('chatStageTiming', {
+    request(operation, task) {
+      const inherited = context.getStore()
+      if (inherited?.agent === undefined) return task()
+      return measure(inherited, 'auxiliaryModel', `${operation.provider}/${operation.model}`, task, undefined,
+        { ...operation, role: 'auxiliary', parentKind: inherited.phase })
+    },
     async run(operation, task) {
       const inherited = context.getStore()
       if (inherited === undefined || !SESSION_TIMING_KINDS.includes(inherited.phase)) return task()
@@ -41,8 +52,12 @@ export function installSessionTimingObserver(ctx, appendPluginRecord = (session,
   }
   async function measure(position, kind, detail, next, rejected, operation) {
     const value = { id: randomUUID(), kind, startTime: Date.now(), ...(detail === undefined ? {} : { detail }),
-      ...(operation === undefined ? {} : { plugin: operation.plugin, operation: operation.operation, parentKind: kind,
-        ...(operation.rules === undefined ? {} : { rules: operation.rules }) }) }
+      ...(operation === undefined ? {} : { plugin: operation.plugin, operation: operation.operation, parentKind: operation.parentKind ?? kind,
+        ...(operation.rules === undefined ? {} : { rules: operation.rules }),
+        ...(operation.role === undefined ? {} : { role: operation.role }),
+        ...(operation.provider === undefined ? {} : { provider: operation.provider }),
+        ...(operation.model === undefined ? {} : { model: operation.model }),
+        ...(operation.transport === undefined ? {} : { transport: operation.transport }) }) }
     record(position, { ...value, phase: 'start' })
     let failed = true
     try {

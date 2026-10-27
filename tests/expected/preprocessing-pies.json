@@ -1,0 +1,16 @@
+{
+  "closedMs": 100,
+  "phases": { "turnPrepare": 2, "preStep": 68, "auxiliaryModel": 30 },
+  "calls": [{ "plugin": "dsh-jev-context-gate", "operation": "before", "transport": "native-decisions", "role": "auxiliary" }],
+  "pies": [
+    { "key": "turnPrepare", "milliseconds": 2, "children": [] },
+    { "key": "preStep", "milliseconds": 68, "children": [
+      { "key": "skills", "milliseconds": 30, "operations": ["skill-snapshot"] },
+      { "key": "instructions", "milliseconds": 10, "operations": ["instructions-compose"] },
+      { "key": "unrecorded", "milliseconds": 28, "operations": [] }
+    ] },
+    { "key": "auxiliaryModel", "milliseconds": 30, "children": [
+      { "key": "dsh-jev-context-gate", "milliseconds": 30, "operations": ["before"] }
+    ] }
+  ]
+}

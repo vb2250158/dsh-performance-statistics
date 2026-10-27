@@ -1,9 +1,14 @@
 import * as React from 'react'
 import { Modal, Pill, Button, IconGaugeOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
+import { sessionBreakdown } from './session-breakdown.js'
 import { sessionStatisticsReading } from './session-statistics.js'
 
 export const sessionStatisticsLocales = {
   zh: {
+    breakdown: '{stage} · 处理明细', noChildren: '该项尚无已采集的子步骤。', missingWork: '内部明细未记录',
+    stageSubtotal: '本级耗时', pluginScope: '该插件已记录操作的独占耗时；点选可继续查看子步骤。',
+    transport: '请求方式', nativeDecision: '原生概率判定 API（整包返回，无流式首 token）', modelStream: '模型流',
+    childrenHint: '点选环或图例，下方显示它的子饼图。', atThisLevel: '占本级 {value}',
     title: '会话统计', close: '关闭会话统计', open: '查看会话统计', counts: '{turns} 轮 · {steps} 步',
     stageOperations: '{stage}内部操作', stageTotal: '本阶段独占耗时：{value}。内部操作可能重叠，或已单列到其他饼图阶段，不能直接相加。',
     missingStageAttribution: '这段 {value} 尚未记录处理插件或子步骤名称，无法事后补算；不把外层阶段当成已细分的数据。',
@@ -34,6 +39,10 @@ export const sessionStatisticsLocales = {
     succeeded: '流正常结束', interrupted: '失败或中断', unlabelled: '调用方未标注用途', unavailableCaller: '调用方未标注插件', contextStage: '所在环节',
   },
   en: {
+    breakdown: '{stage} · Breakdown', noChildren: 'No recorded substeps are available for this item.', missingWork: 'Internal details not recorded',
+    stageSubtotal: 'Time at this level', pluginScope: 'Exclusive time of recorded operations in this plugin; select to inspect substeps.',
+    transport: 'Request transport', nativeDecision: 'Native probability API (one response; no streamed first token)', modelStream: 'Model stream',
+    childrenHint: 'Select a slice or legend to show its child pie below.', atThisLevel: '{value} of this level',
     title: 'Session statistics', close: 'Close session statistics', open: 'View session statistics', counts: '{turns} turns · {steps} steps',
     stageOperations: 'Operations inside {stage}', stageTotal: 'Exclusive stage time: {value}. Internal operations may overlap or belong to separate pie stages; do not add their durations.',
     missingStageAttribution: 'No processing plugin or substep name was recorded for this {value}; those details cannot be recovered from the enclosing stage.',
@@ -66,12 +75,37 @@ export const sessionStatisticsLocales = {
 }
 
 const operationCopy = [
+  ['input-rules', '输入规则处理', 'Input rule processing'],
+  ['candidate-source', '候选内容读取与脚本执行', 'Candidate reads and scripts'],
+  ['question-provider', '问题生成与脚本执行', 'Question generation and scripts'],
+  ['projection-ready', '等待投影就绪', 'Projection readiness'],
+  ['instructions-compose', '指令加载与整理', 'Instruction loading and assembly'],
+  ['session-references', '引用会话读取与整理', 'Referenced session preparation'],
+  ['time-context', '时间上下文整理', 'Time context preparation'],
+  ['tmux-query', '终端位置查询', 'Terminal location query'],
+  ['skill-snapshot', '技能目录扫描与快照', 'Skill catalog scan and snapshot'],
+  ['skill-invocation', '指定技能读取与注入', 'Explicit skill loading and injection'],
   ['before', '输入规则判断', 'Input rule classification'], ['after', '回复规则检查', 'Response rule checks'],
   ['skill-catalog', '技能候选筛选', 'Skill candidate selection'], ['skill-injection', '技能注入检查', 'Skill injection checks'],
   ['tool-before', '工具执行前检查', 'Tool pre-execution checks'], ['tool-after', '工具结果检查', 'Tool-result checks'],
   ['external', '外部事件规则判断', 'External-event classification'], ['compaction', '上下文压缩', 'Context compaction'],
   ['session-title', '会话标题生成', 'Session title generation'],
 ]
+const operationScopes = [
+  ['skill-snapshot', '查找可用技能、生成目录快照并整理注入内容。', 'Discover available skills, capture their catalog and prepare its injection.'],
+  ['skill-invocation', '读取用户指定的技能并准备注入。', 'Load explicitly invoked skills and prepare their injection.'],
+  ['instructions-compose', '等待指令投影、读取并整理当前生效的工作区指令。', 'Await instruction projections and load and assemble current workspace instructions.'],
+  ['candidate-source', '读取候选内容或执行候选提供脚本。', 'Read candidates or execute the candidate-source script.'],
+  ['question-provider', '执行规则问题生成，包括配置的问题脚本。', 'Generate rule questions, including configured question scripts.'],
+  ['input-rules', '输入规则处理，扣除已单独列出的子步骤与模型请求。', 'Input rule processing, excluding separately attributed substeps and model requests.'],
+  ['projection-ready', '等待此组件依赖的会话投影就绪。', 'Wait for this component’s session projection.'],
+  ['before', '执行输入规则判断，按本级实际占用时间分配。', 'Evaluate input rules, using exclusive time at this level.'],
+  ['skill-catalog', '对技能候选进行相关性判定。', 'Evaluate the relevance of skill candidates.'],
+]
+for (const [key, zh, en] of operationScopes) {
+  sessionStatisticsLocales.zh[`operationScope_${key}`] = zh
+  sessionStatisticsLocales.en[`operationScope_${key}`] = en
+}
 for (const [key, zh, en] of operationCopy) {
   sessionStatisticsLocales.zh[`operation_${key}`] = zh
   sessionStatisticsLocales.en[`operation_${key}`] = en
@@ -133,8 +167,8 @@ export const sessionStatisticsCss = `
 .dsh-session-statistics-token-grid div{display:grid;gap:6px;min-width:0}.dsh-session-statistics-token-grid dt{font-size:12px;color:var(--dsw-alias-label-secondary)}
 .dsh-session-statistics-token-grid dd{font-size:16px;margin:0;overflow-wrap:anywhere}
 .dsh-session-statistics-trigger{max-width:100%;gap:6px;font-variant-numeric:tabular-nums}.dsh-session-statistics-trigger>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dsh-session-statistics-pie-layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:24px;align-items:center}
-.dsh-session-statistics-pie{width:240px;max-width:100%;display:block;margin:auto;overflow:visible}
+.dsh-session-statistics-pie-layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:24px;align-items:start}
+.dsh-session-statistics-pie{position:sticky;top:0;align-self:start;width:240px;max-width:100%;display:block;margin:auto;overflow:visible}
 .dsh-session-statistics-pie circle[data-stage]{cursor:pointer;transition:opacity .12s}
 .dsh-session-statistics-pie text{fill:var(--dsw-alias-label-primary);text-anchor:middle;font-size:22px;font-weight:600}
 .dsh-session-statistics-pie .dsh-session-statistics-pie-label{fill:var(--dsw-alias-label-secondary);font-size:12px;font-weight:400}
@@ -143,7 +177,7 @@ export const sessionStatisticsCss = `
 .dsh-session-statistics-legend button:hover,.dsh-session-statistics-legend button[aria-pressed=true]{background:var(--dsw-alias-interactive-bg-hover);border-color:var(--dsw-alias-border-l2)}
 .dsh-session-statistics-legend button:focus-visible{outline:2px solid var(--dsw-alias-link);outline-offset:2px}
 .dsh-session-statistics-swatch{width:9px;height:9px;border-radius:3px;background:var(--stage-color)}
-.dsh-session-statistics-legend small{display:block;color:var(--dsw-alias-label-secondary);font-size:11px;margin-top:3px}
+.dsh-session-statistics-legend small{display:block;grid-column:2/-1;color:var(--dsw-alias-label-secondary);font-size:11px;margin-top:3px}
 .dsh-session-statistics-operation{display:block;color:var(--dsw-alias-label-secondary);font-size:11px}
 .dsh-session-statistics-table tr[data-selected=true]{background:var(--dsw-alias-interactive-bg-hover)}
 .dsh-session-statistics-call{border:1px solid var(--dsw-alias-border-l2);border-radius:10px;min-width:0;overflow:hidden}
@@ -168,36 +202,32 @@ function statisticsDuration(value, t) {
 
 const statisticsNode = React.createElement
 
-function StatisticsPie({ phases, total, selected, select, t }) {
+function StatisticsPie({ phases, total, selected, select, t, level = 0, label = t('pie') }) {
   const h = statisticsNode, circumference = 2 * Math.PI * 82
   let offset = 0
-  return h('div', { className: 'dsh-session-statistics-pie-layout' },
-    h('svg', { className: 'dsh-session-statistics-pie', viewBox: '0 0 240 240', role: 'img', 'aria-label': t('pie') },
+  const percent = ratio => ratio > 0 && ratio < 0.001 ? '<0.1%' : `${statisticsNumber(ratio * 100, t)}%`
+  const name = row => row.label ?? t(`phase_${row.key}`)
+  const scope = row => row.description ?? t(`scope_${row.key}`)
+  return h('div', { className: 'dsh-session-statistics-pie-layout', 'data-pie-level': level },
+    h('svg', { className: 'dsh-session-statistics-pie', viewBox: '0 0 240 240', role: 'img', 'aria-label': label },
       h('circle', { cx: 120, cy: 120, r: 82, fill: 'none', strokeWidth: 36, stroke: 'var(--dsw-alias-interactive-bg-hover)' }),
       ...phases.map(row => {
         const start = offset; offset += row.ratio
-        const label = `${t(`phase_${row.key}`)}: ${statisticsDuration(row.milliseconds, t)} (${statisticsNumber(row.ratio * 100, t)}%)`
+        const label = `${name(row)}: ${statisticsDuration(row.milliseconds, t)} · ${percent(row.ratio)}`
         return h('circle', { key: row.key, cx: 120, cy: 120, r: 82, fill: 'none', strokeWidth: 36,
-          stroke: stageColor(row.key), strokeDasharray: `${row.ratio * circumference} ${circumference}`,
+          stroke: row.color ?? stageColor(row.key), strokeDasharray: `${row.ratio * circumference} ${circumference}`,
           strokeDashoffset: -start * circumference, transform: 'rotate(-90 120 120)', 'data-stage': row.key,
           opacity: selected === undefined || selected === row.key ? 1 : 0.25, onClick: () => select(row.key) }, h('title', null, label))
       }),
       h('text', { x: 120, y: 116 }, statisticsDuration(total, t)),
-      h('text', { x: 120, y: 142, className: 'dsh-session-statistics-pie-label' }, t('total'))),
+      h('text', { x: 120, y: 142, className: 'dsh-session-statistics-pie-label' }, t(level === 0 ? 'total' : 'stageSubtotal'))),
     h('div', { className: 'dsh-session-statistics-legend' }, ...phases.map(row => h('button', {
       key: row.key, type: 'button', 'aria-pressed': selected === row.key, onClick: () => select(row.key),
-      style: { '--stage-color': stageColor(row.key) }, 'data-stage-legend': row.key,
+      style: { '--stage-color': row.color ?? stageColor(row.key) }, 'data-stage-legend': row.key,
     }, h('span', { className: 'dsh-session-statistics-swatch', 'aria-hidden': true }),
-    h('span', null, t(`phase_${row.key}`), h('small', null, statisticsDuration(row.milliseconds, t))),
-    h('span', null, `${statisticsNumber(row.ratio * 100, t)}%`)))))
-}
-
-function StatisticsTable({ rows, label, t }) {
-  const h = statisticsNode
-  return h('table', { className: 'dsh-session-statistics-table', 'aria-label': label },
-    h('thead', null, h('tr', null, ...['metric', 'value', 'unit'].map(key => h('th', { key, scope: 'col' }, t(key))))),
-    h('tbody', null, ...rows.map(row => h('tr', { key: row.key, 'data-stage-row': row.stage },
-      h('td', null, row.label), h('td', null, row.value), h('td', null, row.description)))))
+    h('span', { className: 'dsh-session-statistics-legend-name' }, name(row)),
+    h('span', { className: 'dsh-session-statistics-legend-value' }, `${statisticsDuration(row.milliseconds, t)} · ${percent(row.ratio)}`),
+    h('small', { className: 'dsh-session-statistics-legend-scope' }, scope(row))))))
 }
 
 function AuxiliaryCall({ call, t }) {
@@ -210,6 +240,7 @@ function AuxiliaryCall({ call, t }) {
     ['caller', call.plugin ?? t('unavailableCaller')], ['task', purposeText],
     ['rules', ruleText || t('missing')], ['contextStage', stageCopy.some(row => row[0] === parent) ? t(`phase_${parent}`) : t('missing')],
     ['provider', call.provider ?? t('missing')], ['route', call.model ?? call.detail ?? t('missing')],
+    ['transport', t(call.transport === 'native-decisions' ? 'nativeDecision' : 'modelStream')],
     ['requestTime', statisticsDuration(call.endTime - call.startTime, t)],
     ['firstTokenWait', statisticsDuration(call.firstTokenTime === undefined ? undefined : call.firstTokenTime - call.startTime, t)],
     ['streamTime', statisticsDuration(call.firstTokenTime === undefined ? undefined : call.endTime - call.firstTokenTime, t)],
@@ -225,70 +256,61 @@ function AuxiliaryCall({ call, t }) {
       ...rows.map(([key, value]) => h('div', { key }, h('dt', null, t(key)), h('dd', null, value)))))
 }
 
+function BreakdownPie({ node, selected, select, level, t }) {
+  const h = statisticsNode, target = React.useRef(null)
+  React.useEffect(() => { target.current.scrollIntoView({ block: 'start', behavior: 'auto' }) }, [node.key])
+  const title = t('breakdown', { stage: breakdownLabel(node, t) })
+  const phases = node.children.map((row, index) => ({ ...row, ratio: node.milliseconds > 0 ? row.milliseconds / node.milliseconds : 0,
+    label: breakdownLabel(row, t), description: row.missing ? t('missingStageAttribution', { value: statisticsDuration(row.milliseconds, t) })
+      : row.operation ? operationScopes.some(item => item[0] === row.operation) ? t('operationScope_' + row.operation) : t('pieScope')
+        : t('pluginScope'), color: stageColors[index % stageColors.length] }))
+  return h('section', { ref: target, className: 'dsh-session-statistics-section', 'data-breakdown': node.key },
+    h('h3', null, title), h(StatisticsPie, { phases, total: node.milliseconds, selected, select, t, level, label: title }))
+}
+
+function breakdownLabel(node, t) {
+  if (node.missing) return t('missingWork')
+  if (node.operation && operationCopy.some(row => row[0] === node.operation)) return t('operation_' + node.operation)
+  return node.label ?? node.operation ?? node.plugin ?? node.key
+}
+
 function StatisticsDetails({ stats, usage, stages, t }) {
-  const [selected, setSelected] = React.useState()
-  const h = statisticsNode, reading = sessionStatisticsReading(stats, stages)
+  const [path, setPath] = React.useState([])
+  const h = statisticsNode, reading = sessionStatisticsReading(stats, stages), tree = sessionBreakdown(stages)
   if (stats === undefined) return h('p', { className: 'dsh-session-statistics-note' }, t('noStats'))
-  const select = key => setSelected(previous => previous === key ? undefined : key)
-  const operations = stages?.operations ?? stages?.calls ?? []
-  const stageOperations = operations.filter(row => (row.kind === selected || row.parentKind === selected)
-    && (row.detail !== undefined || row.plugin !== undefined || row.role !== undefined))
-  const relatedAuxiliary = (stages?.calls ?? []).filter(call => call.role === 'auxiliary'
-    && (selected === undefined || selected === 'auxiliaryModel' || call.parentKind === selected))
-  const rows = [
-    { key: 'total', value: stats.turnMs, description: t('totalScope') },
-    ...reading.timings.filter(row => row.key !== 'unrecorded' || stages === undefined)
-      .map(row => ({ ...row, value: row.milliseconds, description: t(`${row.key}Scope`) })),
-    { key: 'responseWait', value: reading.responseWait, description: t('responseScope') },
-    { key: 'ttft', value: reading.averageTtft, description: t('ttftScope', { value: stats.ttftSteps }) },
-    { key: 'decode', value: stats.decodeMs, description: t('decodeScope') },
-  ].map(row => ({ ...row, label: t(row.key), value: statisticsDuration(row.value, t) }))
-  rows.push({ key: 'decodeTokens', label: t('decodeTokens'), value: statisticsNumber(stats.decodeTokens, t, 0), description: t('speedScope') })
+  const choose = (level, key) => setPath(previous => previous[level] === key ? previous.slice(0, level) : [...previous.slice(0, level), key])
+  const expanded = []
+  let siblings = tree
+  for (const key of path) {
+    const node = siblings.find(row => row.key === key)
+    if (!node) break
+    expanded.push(node); siblings = node.children
+  }
+  const selectedCallIds = new Set(expanded.at(-1)?.callIds ?? [])
+  const calls = (stages?.calls ?? []).filter(call => call.role === 'auxiliary' && selectedCallIds.has(call.id))
   return h('div', { className: 'dsh-session-statistics-body' },
-    h('dl', { className: 'dsh-session-statistics-summary' },
-      ...[
-        ['total', statisticsDuration(stats.turnMs, t)],
-        [reading.responseWait === undefined ? 'ttft' : 'responseWait', statisticsDuration(reading.responseWait ?? reading.averageTtft, t)],
-        ['speed', reading.speed === undefined ? t('missing') : t('tps', { value: statisticsNumber(reading.speed, t) })],
-      ].map(([key, value]) => h('div', { key }, h('dt', null, t(key)), h('dd', null, value)))),
-    h('section', { className: 'dsh-session-statistics-section', 'aria-label': t('pie') },
-      h('h3', null, t('pie')),
-      reading.phases.length > 0 ? h(StatisticsPie, { phases: reading.phases, total: stages.closedMs, selected, select, t })
+    h('dl', { className: 'dsh-session-statistics-summary' }, ...[
+      ['total', statisticsDuration(stats.turnMs, t)],
+      [reading.responseWait === undefined ? 'ttft' : 'responseWait', statisticsDuration(reading.responseWait ?? reading.averageTtft, t)],
+      ['speed', reading.speed === undefined ? t('missing') : t('tps', { value: statisticsNumber(reading.speed, t) })],
+    ].map(([key, value]) => h('div', { key }, h('dt', null, t(key)), h('dd', null, value)))),
+    h('section', { className: 'dsh-session-statistics-section' }, h('h3', null, t('pie')),
+      h('p', { className: 'dsh-session-statistics-note' }, t('childrenHint')),
+      reading.phases.length > 0 ? h(StatisticsPie, { phases: reading.phases, total: stages.closedMs, selected: path[0], select: key => choose(0, key), t })
         : h('p', { className: 'dsh-session-statistics-note' }, t(stages === undefined ? 'noStages' : 'empty')),
       h('p', { className: 'dsh-session-statistics-note' }, t('pieScope')),
-      stages?.measuredSpans === 0 && h('p', { className: 'dsh-session-statistics-note' }, t('oldScope')),
       stages?.incompleteSpans > 0 && h('p', { className: 'dsh-session-statistics-note' }, t('incomplete', { value: stages.incompleteSpans }))),
-    reading.phases.length > 0 && h('section', { className: 'dsh-session-statistics-section' },
-      h('h3', null, t('phases')), selected !== undefined && h(Button, { onClick: () => setSelected(undefined) }, t('clear')),
-      h(StatisticsTable, { label: t('phases'), t, rows: reading.phases.filter(row => selected === undefined || row.key === selected)
-        .map(row => ({ key: row.key, stage: row.key, label: t(`phase_${row.key}`), value: statisticsDuration(row.milliseconds, t), description: t(`scope_${row.key}`) })) })),
-    selected !== undefined && h('section', { className: 'dsh-session-statistics-section', 'data-selected-operations': selected },
-      h('h3', null, t('stageOperations', { stage: t(`phase_${selected}`) })),
-      h('p', { className: 'dsh-session-statistics-note' }, t('stageTotal', { value: statisticsDuration(stages.phases[selected], t) })),
-      h('p', { className: 'dsh-session-statistics-note' }, t('stageCoverage')),
-      !stageOperations.some(row => row.kind === selected) && h('p', { className: 'dsh-session-statistics-note', role: 'status' },
-        t('missingStageAttribution', { value: statisticsDuration(stages.phases[selected], t) })),
-      stageOperations.length === 0 ? h('p', { className: 'dsh-session-statistics-note' }, t('noStageOperations'))
-        : h(StatisticsTable, { label: t('stageOperations', { stage: t(`phase_${selected}`) }), t,
-          rows: stageOperations.map(row => ({ key: row.id,
-            label: [row.plugin, row.operation, row.detail].filter((value, index, values) => value !== undefined && values.indexOf(value) === index).join(' · '),
-            value: statisticsDuration(row.endTime - row.startTime, t),
-            description: `${t(`phase_${row.kind}`)} · ${t('callPosition', { turn: row.turn, step: row.step })}` })) })),
-    relatedAuxiliary.length > 0 &&
-      h('section', { className: 'dsh-session-statistics-section', 'aria-label': t('auxiliaryCalls') }, h('h3', null, t('auxiliaryCalls')),
-        h('p', { className: 'dsh-session-statistics-note' }, t('auxiliaryHelp')),
-        ...relatedAuxiliary.sort((a, b) => a.startTime - b.startTime)
-          .map(call => h(AuxiliaryCall, { key: call.id, call, t }))),
-    selected === undefined && stages?.details.length > 0 && h('section', { className: 'dsh-session-statistics-section' }, h('h3', null, t('operations')),
-      h('p', { className: 'dsh-session-statistics-note' }, t('operationScope')),
-      h(StatisticsTable, { label: t('operations'), t, rows: stages.details.map((row, index) => ({ key: String(index),
-        label: row.name, value: statisticsDuration(row.milliseconds, t),
-        description: `${t(`phase_${row.kind}`)} · ${t('calls')} ${statisticsNumber(row.calls, t, 0)} · ${t('failed')} ${statisticsNumber(row.failed, t, 0)}` })) })),
-    h('section', { className: 'dsh-session-statistics-section' }, h('h3', null, t('metrics')), h(StatisticsTable, { rows, label: t('metrics'), t })),
+    ...expanded.map((node, index) => node.children.length > 0
+      ? h(BreakdownPie, { key: path.slice(0, index + 1).join('/'), node: { ...node, label: index === 0 ? t('phase_' + node.key) : node.label },
+        level: index + 1, selected: path[index + 1], select: key => choose(index + 1, key), t })
+      : h('p', { key: 'leaf-' + node.key, className: 'dsh-session-statistics-note', role: 'status' },
+        node.missing || index === 0 ? t('missingStageAttribution', { value: statisticsDuration(node.milliseconds, t) }) : t('noChildren'))),
+    calls.length > 0 && h('section', { className: 'dsh-session-statistics-section' }, h('h3', null, t('auxiliaryCalls')),
+      ...calls.map(call => h(AuxiliaryCall, { key: call.id, call, t }))),
     usage !== undefined && h('section', { className: 'dsh-session-statistics-section' }, h('h3', null, t('tokens')),
-      h('dl', { className: 'dsh-session-statistics-token-grid' },
-        ...[['input', usage.uncachedInputTokens], ['cacheRead', usage.cacheReadTokens], ['cacheWrite', usage.cacheWriteTokens], ['output', usage.outputTokens]]
-          .map(([key, value]) => h('div', { key }, h('dt', null, t(key)), h('dd', null, value === undefined ? t('missing') : statisticsNumber(value, t, 0)))))))
+      h('dl', { className: 'dsh-session-statistics-token-grid' }, ...[
+        ['input', usage.uncachedInputTokens], ['cacheRead', usage.cacheReadTokens], ['cacheWrite', usage.cacheWriteTokens], ['output', usage.outputTokens],
+      ].map(([key, value]) => h('div', { key }, h('dt', null, t(key)), h('dd', null, value === undefined ? t('missing') : statisticsNumber(value, t, 0)))))))
 }
 
 /** Replace only the activity entry; projection updates remain owned by the host. */

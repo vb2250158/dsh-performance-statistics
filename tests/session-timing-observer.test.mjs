@@ -27,6 +27,40 @@ function fixture() {
   return { ctx, agents, records, warnings, invoke, append, dispose: () => cleanups.reverse().forEach(fn => typeof fn === 'function' && fn()) }
 }
 
+test('explicit pre-step position covers callers outside the enclosing async context', async () => {
+  const f = fixture(); installSessionTimingObserver(f.ctx, f.append)
+  const result = { kind: 'enter' }, failure = new Error('task failure')
+  const timing = f.ctx.get('agentPreStepTiming')
+  await Promise.all(f.agents.map((agent, index) => timing.run({ agent, turn: index, step: 3 },
+    { plugin: 'input-owner', operation: 'skill-snapshot' }, async () => result)))
+  const rows = f.records.filter(row => row.data.phase === 'end')
+  assert.deepEqual(rows.map(row => [row.session, row.data.turn, row.data.step]), [['a', 0, 3], ['b', 1, 3]])
+  assert.ok(rows.every(row => row.data.kind === 'preStep' && row.data.operation === 'skill-snapshot'))
+  await assert.rejects(timing.run({ agent: f.agents[0], turn: 2, step: 1 },
+    { plugin: 'input-owner', operation: 'failure' }, async () => { throw failure }), error => error === failure)
+  assert.equal(f.records.at(-1).data.failed, true)
+  f.dispose(); assert.equal(f.ctx.get('agentPreStepTiming'), undefined)
+})
+
+test('non-streaming native decisions are auxiliary requests with their own route and enclosing stage', async () => {
+  const f = fixture(); installSessionTimingObserver(f.ctx, f.append)
+  const result = { probabilities: { yes: 1 } }, failure = new Error('native failure')
+  const service = f.ctx.get('chatStageTiming'), metadata = { plugin: 'native-gate', operation: 'before',
+    provider: 'fixture', model: 'native', transport: 'native-decisions', rules: [{ id: 'input' }] }
+  await f.ctx.get('agentPreStepTiming').run({ agent: f.agents[0], turn: 4, step: 1 },
+    { plugin: 'native-gate', operation: 'input-rules' }, async () => {
+      assert.strictEqual(await service.request(metadata, async () => result), result)
+      await assert.rejects(service.request(metadata, async () => { throw failure }), error => error === failure)
+    })
+  const calls = f.records.filter(row => row.data.phase === 'end' && row.data.role === 'auxiliary').map(row => row.data)
+  assert.deepEqual(calls.map(row => [row.kind, row.parentKind, row.transport, row.failed]), [
+    ['auxiliaryModel', 'preStep', 'native-decisions', false], ['auxiliaryModel', 'preStep', 'native-decisions', true],
+  ])
+  assert.ok(calls.every(row => row.provider === 'fixture' && row.model === 'native' && row.firstTokenTime === undefined))
+  assert.doesNotMatch(JSON.stringify(f.records), /probabilities/)
+  f.dispose()
+})
+
 test('meters concurrent pre-step helper models in the correct sessions without retaining private content', async () => {
   const f = fixture()
   installSessionTimingObserver(f.ctx, f.append)

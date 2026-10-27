@@ -11,6 +11,7 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
   const require = createRequire(resolve(sourceRoot, 'packages/client/ui-primitives/package.json'))
   const React = require('react'), { JSDOM } = require('jsdom')
   const dom = new JSDOM('<!doctype html><div id="app"></div>', { url: 'http://localhost/' })
+  dom.window.HTMLElement.prototype.scrollIntoView = function () {}
   const globals = { window: dom.window, document: dom.window.document, navigator: dom.window.navigator,
     HTMLElement: dom.window.HTMLElement, Node: dom.window.Node, getComputedStyle: dom.window.getComputedStyle, IS_REACT_ACT_ENVIRONMENT: true }
   const previous = Object.fromEntries(Object.keys(globals).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]))
@@ -57,6 +58,12 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
       { id: 'second', role: 'auxiliary', kind: 'auxiliaryModel', phase: 'end', turn: 0, step: 1,
         startTime: 7100, endTime: 12100, firstTokenTime: 11100, provider: 'fixture', model: 'judge', plugin: 'dsh-jev-context-gate',
         operation: 'before', parentKind: 'preStep', rules: [{ id: 'input-rule', title: '输入判断规则' }], failed: false }] }
+    stages.work = [
+      {kind:'preStep',plugin:'fixture-preprocessor',operation:'catalog-snapshot',operationId:'catalog',milliseconds:1600},
+      {kind:'preStep',plugin:'fixture-context',operation:'context-ready',operationId:'context',milliseconds:800},
+      {kind:'auxiliaryModel',plugin:'dsh-jev-context-gate',operation:'skill-catalog',operationId:'first',milliseconds:7000},
+      {kind:'auxiliaryModel',plugin:'dsh-jev-context-gate',operation:'before',operationId:'second',milliseconds:5000},
+    ]
     let t = translate('zh')
     const render = () => root.render(React.createElement(activity.component, { useProjection: name =>
       name === 'sessionStats' ? stats : name === 'chatSessionTiming' ? stages : name === 'tokenUsage' ? usage : undefined, t }))
@@ -72,19 +79,31 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     assert.equal(dialog.getAttribute('aria-modal'), 'true')
     assert.match(dialog.textContent, /12 秒/)
     assert.match(dialog.textContent, /3.2 秒/)
-    assert.match(dialog.textContent, /1,000 毫秒/)
-    assert.match(dialog.textContent, /999 毫秒/)
-    assert.match(dialog.textContent, /1.001 秒/)
+    assert.equal(dialog.querySelectorAll('table').length, 0, 'Pies replace the old detail tables')
     assert.match(dialog.textContent, /31,900/)
     assert.doesNotMatch(dialog.textContent, /其他处理与等待/)
     assert.match(dialog.textContent, /同一毫秒只计入一个环节/)
     assert.match(dialog.textContent, /17.7 秒/)
     assert.equal(dialog.querySelectorAll('svg[role="img"]').length, 1)
-    const fractions = () => [...dialog.querySelectorAll('circle[data-stage]')].map(circle => Number(circle.getAttribute('stroke-dasharray').split(' ')[0]) / (2 * Math.PI * 82))
+    const fractions = () => [...dialog.querySelectorAll('[data-pie-level="0"] circle[data-stage]')].map(circle => Number(circle.getAttribute('stroke-dasharray').split(' ')[0]) / (2 * Math.PI * 82))
     assert.ok(Math.abs(fractions().reduce((sum, value) => sum + value, 0) - 1) < 0.000001)
-    await React.act(async () => dialog.querySelector('[data-stage-legend="auxiliaryModel"]').click())
-    assert.equal(dialog.querySelectorAll('[data-stage-row]').length, 1)
-    assert.equal(dialog.querySelectorAll('[data-auxiliary-call]').length, 2)
+    const rootLegend = key => dialog.querySelector('[data-pie-level="0"] [data-stage-legend="' + key + '"]')
+    const waitLegend = rootLegend('modelWait')
+    assert.match(waitLegend.querySelector('.dsh-session-statistics-legend-value').textContent, /3.2 秒.*18%/)
+    assert.match(waitLegend.querySelector('.dsh-session-statistics-legend-scope').textContent, /已记录请求派发/)
+    await React.act(async () => rootLegend('preStep').click())
+    assert.equal(dialog.querySelectorAll('svg[role="img"]').length, 2, 'Selection appends a child pie while keeping the parent')
+    assert.match(dialog.querySelector('[data-breakdown="preStep"]').textContent, /输入预处理.*处理明细/)
+    assert.match(dialog.querySelector('[data-breakdown="preStep"]').textContent, /fixture-preprocessor.*1.6 秒.*66.7%/s)
+    assert.equal(dialog.querySelectorAll('table').length, 0)
+    await React.act(async () => dialog.querySelector('[data-pie-level="1"] [data-stage-legend="fixture-preprocessor"]').click())
+    assert.equal(dialog.querySelectorAll('svg[role="img"]').length, 3)
+    assert.match(dialog.querySelector('[data-pie-level="2"]').textContent, /catalog-snapshot/)
+    await React.act(async () => rootLegend('auxiliaryModel').click())
+    assert.equal(dialog.querySelectorAll('svg[role="img"]').length, 2, 'Changing an ancestor discards the previous descendant pies')
+    await React.act(async () => dialog.querySelector('[data-pie-level="1"] [data-stage-legend="dsh-jev-context-gate"]').click())
+    await React.act(async () => dialog.querySelector('[data-pie-level="2"] [data-stage-legend="skill-catalog"]').click())
+    assert.equal(dialog.querySelectorAll('[data-auxiliary-call]').length, 1)
     const callButton = dialog.querySelector('[data-auxiliary-call="first"] button')
     assert.match(callButton.textContent, /技能候选筛选.*技能选择规则/s)
     await React.act(async () => callButton.click())
@@ -94,26 +113,12 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     assert.match(callDetails, /6 秒/)
     assert.match(callDetails, /1,000 毫秒/)
     assert.match(callDetails, /7 秒/)
-    assert.equal(dialog.querySelector('[data-stage-legend="auxiliaryModel"]').getAttribute('aria-pressed'), 'true')
-    await React.act(async () => dialog.querySelector('[data-stage-legend="auxiliaryModel"]').click())
-    assert.equal(dialog.querySelectorAll('[data-stage-row]').length, 5)
-
-    await React.act(async () => dialog.querySelector('[data-stage-legend="preStep"]').click())
-    assert.equal(dialog.querySelectorAll('[data-stage-row]').length, 1)
-    assert.equal(dialog.querySelectorAll('[data-auxiliary-call]').length, 2, 'Nested helper calls remain visible when their parent stage is selected')
-    assert.match(dialog.querySelector('[data-selected-operations="preStep"]').textContent, /输入预处理内部操作/)
-    assert.match(dialog.querySelector('[role="status"]').textContent, /2.4 秒.*尚未记录处理插件或子步骤名称/)
-    assert.doesNotMatch(dialog.textContent, /各次操作独立累计/)
-    stages = { ...stages, operations: [...stages.calls, { id: 'catalog', kind: 'preStep', parentKind: 'preStep',
-      plugin: 'fixture-preprocessor', operation: 'catalog-snapshot', turn: 0, step: 1, startTime: 100, endTime: 2500 }] }
-    await React.act(async () => render())
-    assert.match(dialog.querySelector('[data-selected-operations="preStep"]').textContent, /fixture-preprocessor.*catalog-snapshot/)
-    assert.equal(dialog.querySelector('[role="status"]'), null)
-    await React.act(async () => dialog.querySelector('[data-stage-legend="preStep"]').click())
+    await React.act(async () => rootLegend('auxiliaryModel').click())
+    assert.equal(dialog.querySelectorAll('svg[role="img"]').length, 1)
+    assert.equal(dialog.querySelectorAll('[data-auxiliary-call]').length, 0)
 
     stats = { ...stats, toolMs: 35600 }
     await React.act(async () => render())
-    assert.match(dialog.textContent, /35.6 秒/)
     assert.ok(Math.abs(fractions().reduce((sum, value) => sum + value, 0) - 1) < 0.000001, 'Parallel work totals cannot inflate pie shares')
     await React.act(async () => document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
     assert.equal(document.querySelector('[role="dialog"]'), null)
@@ -124,8 +129,6 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     await React.act(async () => render())
     await React.act(async () => document.querySelector('[data-composer-stat="activity"]').click())
     assert.match(document.querySelector('[role="dialog"]').textContent, /Unavailable/)
-    assert.match(document.querySelector('[role="dialog"]').textContent, /3.3 s/)
-    assert.match(document.querySelector('[role="dialog"]').textContent, /0 ms/)
     assert.match(document.querySelector('[role="dialog"]').textContent, /Stage projection is not available yet/)
     assert.equal(document.querySelector('svg[role="img"]'), null)
     await React.act(async () => document.querySelector('[aria-label="Close session statistics"]').click())
