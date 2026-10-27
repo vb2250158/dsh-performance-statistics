@@ -22,6 +22,7 @@ try {
     .replace("from '@deepseek-ai/dsh-llm'", `from ${JSON.stringify(native('llm', 'llm'))}`)
     .replace("from './session-timing.js'", `from ${JSON.stringify(local('session-timing'))}`)
     .replace("from './session-timing-observer.js'", `from ${JSON.stringify(local('session-timing-observer'))}`)
+    .replace("from './preset-refresh.js'", `from ${JSON.stringify(local('preset-refresh'))}`)
   await writeFile(join(dir, 'entry.mjs'), entry)
   await writeFile(join(dir, 'fixture.mjs'), `
 import { LlmAdapter, runFirstTokenTime } from ${JSON.stringify(native('llm', 'llm'))};

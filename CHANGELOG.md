@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.5
+
+- Refresh retained preset declarations through an authenticated activation request so hot-installed preprocessing meters apply to subsequent sessions. Existing Agents retain their revisions and preset configuration is unchanged.
+
 ## 0.1.4 — 2026-10-27
 
 - 使用公开监听注册钩子，为旧宿主新建 Agent 补采组件自身的预处理时间，扣除下游等待，不修改既有监听器列表。

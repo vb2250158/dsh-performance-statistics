@@ -78,4 +78,6 @@ return ctx.get('agentPreStepTiming')?.run(
 
 非流式辅助模型可使用 `timing.request({ plugin, operation, provider, model, transport: 'native-decisions' }, task)`。它从活动异步上下文取得会话位置，记录完整请求耗时，不保存请求和响应内容，也不推算首 token。
 
-旧宿主还可通过公开 `internal/listener` 注册拦截，对统计插件启用后新建的 Agent 采集各组件的自有预处理时间：下游 `next()` 的等待会扣除，协作式计时不会重复记录，卸载后旧包装直接委托。该路径不读取或改写既有监听器列表，已注册的旧回调无法事后补采；新建会话可立即采集。配套宿主补丁提供更细的操作名称。
+旧宿主还可通过公开 `internal/listener` 注册拦截，对统计插件启用后新建的 Agent 采集各组件的自有预处理时间：下游 `next()` 的等待会扣除，协作式计时不会重复记录，卸载后旧包装直接委托。该路径不读取或改写既有监听器列表，已注册的旧回调无法事后补采；热安装后需刷新预设声明，再创建会话采集。配套宿主补丁提供更细的操作名称。
+
+热安装统计插件后，已存在的预设修订不会重新注册监听器。通过已登录的 Connection 向 `/api/dsh-performance-statistics/refresh-presets` 发送 POST，可使用公开 Fiber 生命周期刷新预设声明；配置不变，已有 Agent 保留原修订，后续会话使用新修订。调用失败返回 503，应先检查预设激活诊断；旧历史无法补采。
