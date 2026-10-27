@@ -50,6 +50,33 @@ test('legacy and standalone records contribute to one projection without rewriti
   assert.notEqual(SESSION_TIMING_RECORD, LEGACY_SESSION_TIMING_RECORD)
 })
 
+test('a retry ends at the next request and never absorbs its model wait or answer', () => {
+  const start = (id, time) => ({ ...event(SESSION_TIMING_RECORD, time, {
+    id, kind: 'modelCall', role: 'main', phase: 'start', startTime: time }), ignorable: true })
+  const attempt = event('assistant/attempt', 40, { stream: [] })
+  const { view } = fold([event('turn/start', 0), event('step/start', 10), event('request/context', 10), start('first', 20),
+    span('modelCall', 20, 40, { id: 'first', role: 'main', failed: true }), attempt,
+    span('retry', 40, 50), event('request/context', 51), start('second', 52),
+    span('modelCall', 52, 100, { id: 'second', role: 'main', firstTokenTime: 90 }), message(100, 90), event('turn/end', 100)])
+  assert.equal(view.phases.retry, 11)
+  assert.equal(view.phases.modelWait, 58)
+  assert.equal(view.phases.modelOutput, 10)
+  assert.equal(total(view), 100)
+  const legacy = fold([event('turn/start', 0), event('step/start', 10), event('request/context', 20), attempt,
+    event('request/context', 50), message(100, 90), event('turn/end', 100)]).view
+  assert.equal(legacy.phases.retry, 10)
+  assert.equal(legacy.phases.modelWait, 60)
+  assert.equal(legacy.phases.modelOutput, 10)
+  assert.equal(total(legacy), 100)
+  const measured = fold([event('turn/start', 0), event('step/start', 10), event('request/context', 10), start('first', 20),
+    span('modelCall', 20, 40, { id: 'first', role: 'main', failed: true }), attempt, start('second', 50),
+    span('modelCall', 50, 100, { id: 'second', role: 'main', firstTokenTime: 90 }), message(100, 90), event('turn/end', 100)]).view
+  assert.equal(measured.phases.retry, 10)
+  assert.equal(measured.phases.modelWait, 60)
+  assert.equal(measured.phases.modelOutput, 10)
+  assert.equal(total(measured), 100)
+})
+
 test('historical request reconstructs preparation, first-token wait and answer from durable boundaries', () => {
   const state = fold([event('turn/start', 0), event('step/start', 14460), event('request/context', 14461),
     message(17781, 17616), event('step/end', 17781), event('turn/end', 17781)])

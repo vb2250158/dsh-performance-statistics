@@ -172,7 +172,7 @@ export function createSessionTimingProjection(z, runFirstTokenTime) {
     pending: z.record(z.string(), recordSchema),
   })
   return {
-    key: 'chatSessionTiming', stateVersion: 4,
+    key: 'chatSessionTiming', stateVersion: 5,
     stateSchema: z.object({ view: viewSchema, open: openSchema.nullable(), details: z.record(z.string(), detailSchema) }),
     init: () => ({ view: { closedMs: 0, turns: 0, firstOutputMs: 0, firstOutputTurns: 0, phases: {}, details: [], calls: [], operations: [], work: [], measuredSpans: 0, incompleteSpans: 0 }, open: null, details: {} }),
     apply(state, event) {
@@ -188,7 +188,8 @@ export function createSessionTimingProjection(z, runFirstTokenTime) {
           break
         case 'request/context':
           if (open.step === null) return state
-          open = { ...open, step: { ...open.step, contextAt: event.time } }
+          open = { ...move(open, 'requestPrepare', event.time),
+            step: { number: open.step.number, start: open.step.start, contextAt: event.time } }
           break
         case 'assistant/message': case 'assistant/attempt':
           open = streamSpans(open, event, runFirstTokenTime)
@@ -225,7 +226,10 @@ export function createSessionTimingProjection(z, runFirstTokenTime) {
           if (row.phase === 'start') {
             pending[row.id] = row
             open = { ...open, pending }
-            if (row.role === 'main' && open.step !== null) open = { ...open, step: { ...open.step, dispatchAt: row.startTime } }
+            if (row.role === 'main' && open.step !== null) {
+              if (open.phase === 'retry') open = move(open, 'modelWait', row.startTime)
+              open = { ...open, step: { ...open.step, dispatchAt: row.startTime } }
+            }
             if (row.kind === 'turnStopping') open = move(open, 'turnStopping', row.startTime)
           } else {
             delete pending[row.id]

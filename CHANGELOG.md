@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.6
+
+- End retry attribution when the next request starts and replay existing logs with projection revision 5, preserving model wait and output as separate stages.
+
 ## 0.1.5
 
 - Refresh retained preset declarations through an authenticated activation request so hot-installed preprocessing meters apply to subsequent sessions. Existing Agents retain their revisions and preset configuration is unchanged.
