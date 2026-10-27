@@ -9,7 +9,7 @@ DeepSeek Harness 的独立性能统计插件。点击输入框下方的统计按
 适用于 DSH 0.2.1 系列公开插件 API，已在 0.2.1-rc.3 验证。通过 DSH 的插件管理器安装本仓库，或使用受支持的 CLI：
 
 ```sh
-dsh plugin --profile web add github:vb2250158/dsh-performance-statistics#v0.1.1
+dsh plugin --profile web add github:vb2250158/dsh-performance-statistics#v0.1.2
 ```
 
 安装后启用 **Performance statistics / 性能统计**，重新打开网页。发送一条消息，轮次结束后点击统计按钮；辅助模型卡片可展开，饼图和图例可点击筛选。
