@@ -28,6 +28,8 @@ Each millisecond belongs to one pie stage. Nested measurements take priority and
 
 Old logs can reconstruct only existing event boundaries. Unrecorded internal calls cannot be recovered; unlabelled callers remain unlabelled. Some preprocessing can still have only an enclosing stage until the corresponding plugin supplies finer timing. Purposes are never inferred from prompt contents.
 
+Selecting preprocessing or another stage shows its recorded internal operations, nested auxiliary requests and hooks. If only the stage boundary exists, the dialog explicitly reports missing plugin or substep attribution. Internal operations can overlap or belong to separate pie stages and must not be summed as the selected stage's exclusive time. Projection version 3 replays historical records without rewriting Sessions.
+
 ## Privacy
 
 Local informational records contain only timestamps, model routes, plugin/tool/hook names, configured rule names and IDs, and outcome states. Statistics do not retain prompts, tool arguments, replies or credentials, buffer model streams, or upload telemetry. DSH separately owns its normal conversation logging. Review custom labels before sharing logs.
@@ -54,6 +56,8 @@ const stream = timing
   : ctx.llm.stream(options)
 for await (const chunk of stream) { /* consume normally */ }
 ```
+
+Inside an active Agent stage, non-model tasks can use `timing.run({ plugin: 'my-plugin', operation: 'catalog-snapshot' }, () => loadCatalog())`. Run the original task directly when the service is absent or no stage is active. This async API preserves results and errors without recording task arguments or returned contents. Check `timing?.run` when supporting older statistics providers.
 
 Labels travel through async context independently of provider options. Iteration preserves chunks, cancellation and errors. Public global events observe Agent-local model calls without requiring a root model service. Records use the actual Session instance's public `append` compatibility entry to avoid private-member mismatches across installed Session classes.
 

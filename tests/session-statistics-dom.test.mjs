@@ -98,6 +98,19 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     await React.act(async () => dialog.querySelector('[data-stage-legend="auxiliaryModel"]').click())
     assert.equal(dialog.querySelectorAll('[data-stage-row]').length, 5)
 
+    await React.act(async () => dialog.querySelector('[data-stage-legend="preStep"]').click())
+    assert.equal(dialog.querySelectorAll('[data-stage-row]').length, 1)
+    assert.equal(dialog.querySelectorAll('[data-auxiliary-call]').length, 2, 'Nested helper calls remain visible when their parent stage is selected')
+    assert.match(dialog.querySelector('[data-selected-operations="preStep"]').textContent, /输入预处理内部操作/)
+    assert.match(dialog.querySelector('[role="status"]').textContent, /2.4 秒.*尚未记录处理插件或子步骤名称/)
+    assert.doesNotMatch(dialog.textContent, /各次操作独立累计/)
+    stages = { ...stages, operations: [...stages.calls, { id: 'catalog', kind: 'preStep', parentKind: 'preStep',
+      plugin: 'fixture-preprocessor', operation: 'catalog-snapshot', turn: 0, step: 1, startTime: 100, endTime: 2500 }] }
+    await React.act(async () => render())
+    assert.match(dialog.querySelector('[data-selected-operations="preStep"]').textContent, /fixture-preprocessor.*catalog-snapshot/)
+    assert.equal(dialog.querySelector('[role="status"]'), null)
+    await React.act(async () => dialog.querySelector('[data-stage-legend="preStep"]').click())
+
     stats = { ...stats, toolMs: 35600 }
     await React.act(async () => render())
     assert.match(dialog.textContent, /35.6 秒/)

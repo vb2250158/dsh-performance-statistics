@@ -116,3 +116,20 @@ test('disposing an agent removes its scoped timers before the plugin itself unlo
   assert.equal(f.records.length, 0)
   f.dispose()
 })
+
+test('optional task timing records named preprocessing work and preserves task results and failures', async () => {
+  const f = fixture(); installSessionTimingObserver(f.ctx, f.append)
+  const timing = f.ctx.get('chatStageTiming'), result = { kind: 'enter' }, failure = new Error('fixture failure')
+  assert.strictEqual(await timing.run({ plugin: 'fixture' }, async () => result), result)
+  assert.equal(f.records.length, 0, 'Unscoped work does not attach itself to another session')
+  const agent = f.agents[0]
+  await f.invoke('agent/pre-step', [{ agent, turn: 1, step: 2 }], async () => {
+    assert.strictEqual(await timing.run({ plugin: 'fixture', operation: 'catalog-snapshot' }, async () => result), result)
+    await assert.rejects(timing.run({ plugin: 'fixture', operation: 'candidate-load' }, async () => { throw failure }), error => error === failure)
+  })
+  const tasks = f.records.filter(row => row.data.phase === 'end' && row.data.plugin === 'fixture').map(row => row.data)
+  assert.deepEqual(tasks.map(row => [row.operation, row.kind, row.parentKind, row.failed]), [
+    ['catalog-snapshot', 'preStep', 'preStep', false], ['candidate-load', 'preStep', 'preStep', true],
+  ])
+  f.dispose()
+})

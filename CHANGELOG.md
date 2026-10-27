@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2 — 2026-10-27
+
+- 选择阶段时展示该阶段内记录的操作、辅助模型与钩子，避免继续显示无关的全会话明细。
+- 明确标出没有插件或子步骤归属的阶段耗时，历史日志不推测来源；投影版本 3 从原日志回放。
+- 新增可选 `chatStageTiming.run`，供插件记录非模型子步骤，保留结果、错误与卸载行为。
+- Stage selection shows recorded internal operations, nested auxiliary requests and hooks instead of unrelated whole-session totals.
+- Identify missing plugin/substep attribution without inferring historical details; projection version 3 replays stored records.
+- Add optional `chatStageTiming.run` for non-model tasks while preserving results, failures and disposal.
 ## 0.1.1 — 2026-10-26
 
 - 全部耗时统一自动选择单位：超过 1 秒显示秒，最多保留三位小数；1 秒及以下显示毫秒。

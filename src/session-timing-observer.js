@@ -1,7 +1,7 @@
 /** Record timings through public waterfalls without changing their decisions or buffering streams. */
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomUUID } from 'node:crypto'
-import { SESSION_TIMING_RECORD } from './session-timing.js'
+import { SESSION_TIMING_KINDS, SESSION_TIMING_RECORD } from './session-timing.js'
 
 /** Install scoped stage meters and retain only names, timestamps and outcomes in the log. */
 export function installSessionTimingObserver(ctx, appendPluginRecord = (session, type, data) => session.append(type, data, { ignorable: true })) {
@@ -10,6 +10,11 @@ export function installSessionTimingObserver(ctx, appendPluginRecord = (session,
   let warned = false
   // Callers supply operation names separately from model inputs and transport options.
   ctx.effect(() => ctx.provide('chatStageTiming', {
+    async run(operation, task) {
+      const inherited = context.getStore()
+      if (inherited === undefined || !SESSION_TIMING_KINDS.includes(inherited.phase)) return task()
+      return measure(inherited, inherited.phase, operation.plugin, task, undefined, operation)
+    },
     stream(operation, createStream) {
       const store = { ...context.getStore(), operation }
       return (async function* () {
@@ -34,12 +39,14 @@ export function installSessionTimingObserver(ctx, appendPluginRecord = (session,
       if (!warned) { warned = true; ctx.logger.warn('Session stage timing could not be recorded: %s', error instanceof Error ? error.message : String(error)) }
     }
   }
-  async function measure(position, kind, detail, next, rejected) {
-    const value = { id: randomUUID(), kind, startTime: Date.now(), ...(detail === undefined ? {} : { detail }) }
+  async function measure(position, kind, detail, next, rejected, operation) {
+    const value = { id: randomUUID(), kind, startTime: Date.now(), ...(detail === undefined ? {} : { detail }),
+      ...(operation === undefined ? {} : { plugin: operation.plugin, operation: operation.operation, parentKind: kind,
+        ...(operation.rules === undefined ? {} : { rules: operation.rules }) }) }
     record(position, { ...value, phase: 'start' })
     let failed = true
     try {
-      const result = await context.run({ ...position, phase: kind }, next)
+      const result = await context.run({ ...position, phase: kind, ...(operation === undefined ? {} : { operation }) }, next)
       failed = rejected?.(result) ?? false
       return result
     } finally { record(position, { ...value, phase: 'end', endTime: Math.max(value.startTime, Date.now()), failed }) }

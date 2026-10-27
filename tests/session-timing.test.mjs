@@ -43,6 +43,24 @@ test('historical request reconstructs preparation, first-token wait and answer f
   assert.equal(total(state.view), state.view.closedMs)
 })
 
+test('preprocessing preserves named plugin work and attributes nested hooks without adding wall time', () => {
+  const state = fold([event('turn/start', 0),
+    { ...event(SESSION_TIMING_RECORD, 1, { id: 'pre-step', kind: 'preStep', phase: 'start', startTime: 1 }), ignorable: true },
+    { ...event('plugin:dsh-rabiroute-agent/hook-invoked', 10, { handlerId: 'hook', point: 'UserPromptSubmit' }), ignorable: true },
+    { ...event('plugin:dsh-rabiroute-agent/hook-result', 30, { handlerId: 'hook', durationMs: 20, outcome: 'ok' }), ignorable: true },
+    span('preStep', 35, 90, { detail: 'fixture-preprocessor', plugin: 'fixture-preprocessor', operation: 'catalog-snapshot', parentKind: 'preStep' }),
+    span('preStep', 1, 99), event('turn/end', 100)])
+  const hook = state.view.operations.find(row => row.kind === 'rabiHook')
+  assert.equal(hook.parentKind, 'preStep')
+  assert.equal(hook.plugin, 'dsh-rabiroute-agent')
+  assert.equal(hook.endTime - hook.startTime, 20)
+  const plugin = state.view.operations.find(row => row.plugin === 'fixture-preprocessor')
+  assert.equal(plugin.operation, 'catalog-snapshot')
+  assert.equal(plugin.endTime - plugin.startTime, 55)
+  assert.equal(state.view.calls.length, 0)
+  assert.equal(total(state.view), 100)
+})
+
 test('nested auxiliary models and Rabi requests take time from preprocessing, never add to total', () => {
   const state = fold([event('turn/start', 0),
     span('auxiliaryModel', 10, 3010, { role: 'auxiliary', detail: 'fixture/judge' }),
@@ -71,6 +89,7 @@ test('parallel tools use their interval union while operation readings retain su
   assert.equal(state.view.phases.toolCheck, 10)
   assert.equal(state.view.phases.toolExecute, 90)
   assert.equal(state.view.details.find(row => row.kind === 'toolCall').milliseconds, 200)
+  assert.deepEqual(state.view.operations.filter(row => row.kind === 'toolCall').map(row => row.detail), ['shell', 'shell'])
 })
 
 test('compaction, reasoning and stream finalization remain separate during model output', () => {
