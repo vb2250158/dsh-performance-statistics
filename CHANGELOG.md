@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.11
+
+- Use Hook-specific success and failure labels in invocation cards instead of model-stream completion labels. Verified in built-client interaction and light/dark browser checks.
+
 ## 0.1.10
 
 - Inspect each Rabi lifecycle hook with elapsed time, HTTP status and uncertain, blocked or continued outcomes. Drill into connection discovery, identity checks, API requests and reported server steps; old logs explicitly show unavailable detail.

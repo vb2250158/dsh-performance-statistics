@@ -5,7 +5,7 @@ import { sessionStatisticsReading } from './session-statistics.js'
 
 export const sessionStatisticsLocales = {
   zh: {
-    hookCalls: '逐次 Rabi 钩子', hookHttp: 'HTTP 状态', hookUncertain: '处理结果待核对', hookBlocked: '已阻止', hookContinued: '要求继续处理',
+    hookCalls: '逐次 Rabi 钩子', hookHttp: 'HTTP 状态', hookUncertain: '处理结果待核对', hookBlocked: '已阻止', hookContinued: '要求继续处理', hookSucceeded: '处理成功', hookFailed: '处理失败',
     hookLegacy: '本次仅记录钩子总耗时，内部连接和后台步骤未采集。', hookMeasured: '内部步骤已采集，可继续点选上方图例查看。',
     hookMore: '继续显示钩子（已显示 {shown} / {total}）',
     hookStepScope: '逐次步骤为原始耗时，父子步骤可能嵌套；占比图使用去重后的实际占用时间。',
@@ -53,7 +53,7 @@ export const sessionStatisticsLocales = {
     succeeded: '流正常结束', interrupted: '失败或中断', unlabelled: '调用方未标注用途', unavailableCaller: '调用方未标注插件', contextStage: '所在环节',
   },
   en: {
-    hookCalls: 'Individual Rabi hooks', hookHttp: 'HTTP status', hookUncertain: 'Outcome needs reconciliation', hookBlocked: 'Blocked', hookContinued: 'Continuation requested',
+    hookCalls: 'Individual Rabi hooks', hookHttp: 'HTTP status', hookUncertain: 'Outcome needs reconciliation', hookBlocked: 'Blocked', hookContinued: 'Continuation requested', hookSucceeded: 'Succeeded', hookFailed: 'Failed',
     hookLegacy: 'Only total hook time was recorded. Connection and server steps were not captured.',
     hookMeasured: 'Internal steps were captured. Select the chart legends above to inspect them.',
     hookMore: 'Show more hooks ({shown} / {total} shown)',
@@ -335,7 +335,7 @@ function HookCall({ call, steps, t }) {
         h('strong', null, operationCopy.some(row => row[0] === call.operation) ? t('operation_' + call.operation) : call.operation),
         h('span', null, statisticsDuration(call.endTime - call.startTime, t))),
       h('p', { className: 'dsh-session-statistics-note' }, [t('callPosition', { turn: call.turn, step: call.step }),
-        t(call.uncertain ? 'hookUncertain' : call.failed ? 'interrupted' : call.outcome === 'blocked' ? 'hookBlocked' : call.outcome === 'continued' ? 'hookContinued' : 'succeeded'),
+        t(call.uncertain ? 'hookUncertain' : call.failed ? 'hookFailed' : call.outcome === 'blocked' ? 'hookBlocked' : call.outcome === 'continued' ? 'hookContinued' : 'hookSucceeded'),
         call.statusCode === undefined ? undefined : `${t('hookHttp')}: ${call.statusCode}`].filter(Boolean).join(' · ')),
       h('p', { className: 'dsh-session-statistics-note' }, t(steps.length ? 'hookMeasured' : 'hookLegacy')),
       expanded && h('div', { id: `hook-${call.id}` },

@@ -163,7 +163,7 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     await React.act(async () => render())
     await React.act(async () => rootLegend('rabiHook').click())
     assert.equal(dialog.querySelectorAll('[data-hook-call]').length, 2)
-    assert.match(dialog.querySelector('[data-hook-call="old"]').textContent, /会话开始.*200 毫秒.*HTTP 状态: 200.*内部连接和后台步骤未采集/s)
+    assert.match(dialog.querySelector('[data-hook-call="old"]').textContent, /会话开始.*200 毫秒.*处理成功.*HTTP 状态: 200.*内部连接和后台步骤未采集/s)
     assert.match(dialog.querySelector('[data-hook-call="stop"]').textContent, /回复结束.*800 毫秒.*处理结果待核对.*HTTP 状态: 503/s)
     await React.act(async () => dialog.querySelector('[data-hook-call="stop"] button').click())
     assert.match(dialog.querySelector('[data-hook-call="stop"]').textContent, /查询 Host 状态.*100 毫秒.*Rabi 接口请求 \/ 计划完成检查与回传.*700 毫秒/s)
