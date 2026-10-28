@@ -124,11 +124,13 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
       candidates: Array.from({ length: 51 }, (_, i) => ({ name: `candidate-${i}`, score: (51 - i) / 51, rank: i + 1, selected: i < 2 })) },
     { id: 'different-invocation', ruleId: 'another', ruleTitle: '另一次筛选', mode: 'top', value: 1, threshold: 0.5,
       candidates: [{ name: 'unrelated-candidate', score: 1, rank: 1, selected: true }] }]
+    stages.selections[0].candidates[0].label = 'A long description that must not replace the candidate name'
     await React.act(async () => render())
     const selection = dialog.querySelector('[data-candidate-selection="skills-one"]')
     assert.match(selection.textContent, /候选 51 项 · 保留 2 项 · 剔除 49 项/)
     assert.match(selection.textContent, /最低相关性分数: 50%/)
     assert.match(selection.textContent, /#1 candidate-0.*100% · 保留/)
+    assert.doesNotMatch(selection.textContent, /A long description/)
     assert.doesNotMatch(selection.textContent, /unrelated-candidate/)
     assert.equal(selection.querySelectorAll('li').length, 50)
     await React.act(async () => selection.querySelector('button').click())

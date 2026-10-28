@@ -276,7 +276,7 @@ function CandidateSelection({ selection, t }) {
     selection.threshold !== undefined && h('p', { className: 'dsh-session-statistics-note' }, `${t('selectionThreshold')}: ${statisticsNumber(selection.threshold * 100, t, 1)}%`),
     h('p', { className: 'dsh-session-statistics-note' }, t('selectionScoreHint')),
     h('ol', { className: 'dsh-session-statistics-candidates' }, ...selection.candidates.slice(0, shown).map(row => h('li', { key: row.name },
-      h('span', { className: 'dsh-session-statistics-candidate-name' }, `#${row.rank} ${row.label ? `${row.label} (${row.name})` : row.name}`),
+      h('span', { className: 'dsh-session-statistics-candidate-name', title: row.label }, `#${row.rank} ${row.name}`),
       h('span', { className: 'dsh-session-statistics-candidate-result' }, `${statisticsNumber(row.score * 100, t, 1)}% · ${t(prune ? row.selected ? 'selectionKept' : 'selectionRemoved' : row.selected ? 'selectionChosen' : 'selectionNotChosen')}`)))),
     shown < total && h(Button, { onClick: () => setShown(value => value + 50) }, t('selectionMore', { shown, total })),
     h('p', { className: 'dsh-session-statistics-note' }, t('selectionBatch')))
