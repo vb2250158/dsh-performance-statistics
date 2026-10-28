@@ -237,7 +237,7 @@ export const sessionStatisticsCss = `
 .dsh-session-statistics-call-heading{min-width:0;overflow-wrap:anywhere}.dsh-session-statistics-call-heading small{display:block;font-size:11px;color:var(--dsw-alias-label-secondary);margin-top:4px}
 .dsh-session-statistics-call-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:0 12px 12px;margin:0;font-size:12px}
 .dsh-session-statistics-call-metrics>div{min-width:0}.dsh-session-statistics-call-metrics dt{color:var(--dsw-alias-label-secondary);margin-bottom:4px}.dsh-session-statistics-call-metrics dd{margin:0;overflow-wrap:anywhere}
-@media(max-width:650px){.dsh-session-statistics-pie-layout{grid-template-columns:minmax(0,1fr);gap:12px}.dsh-session-statistics-pie{width:200px}}
+@media(max-width:650px){.dsh-session-statistics-pie-layout{grid-template-columns:minmax(0,1fr);gap:12px}.dsh-session-statistics-pie{position:static;width:200px}}
 @media(max-width:540px){.dsh-session-statistics-summary{gap:8px}.dsh-session-statistics-summary>div{padding:10px}.dsh-session-statistics-summary dd{font-size:18px}.dsh-session-statistics-token-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dsh-session-statistics-table th,.dsh-session-statistics-table td{padding:8px 4px}.dsh-session-statistics-table th:first-child{width:24%}.dsh-session-statistics-table th:nth-child(2){width:27%}}
 `
 

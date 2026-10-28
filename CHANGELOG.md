@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.12
+
+- Keep stacked charts in normal flow on narrow screens so scrolling never pins a pie over its legend or hook readings. Desktop charts retain their sticky layout. Verified keyboard expansion, 460-pixel viewport fit and light/dark screenshots with real public primitives.
+
 ## 0.1.11
 
 - Use Hook-specific success and failure labels in invocation cards instead of model-stream completion labels. Verified in built-client interaction and light/dark browser checks.
