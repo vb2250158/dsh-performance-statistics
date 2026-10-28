@@ -118,6 +118,26 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     await React.act(async () => callButton.click())
     assert.equal(callButton.getAttribute('aria-expanded'), 'true')
     const callDetails = dialog.querySelector('[data-auxiliary-call="first"]').textContent
+    assert.match(callDetails, /本次调用未采集逐项评分/)
+    stages.calls[0].selectionId = 'skills-one'
+    stages.selections = [{ id: 'skills-one', ruleId: 'skill-rule', ruleTitle: '技能选择规则', mode: 'top', value: 2, threshold: 0.5, action: 'prune',
+      candidates: Array.from({ length: 51 }, (_, i) => ({ name: `candidate-${i}`, score: (51 - i) / 51, rank: i + 1, selected: i < 2 })) },
+    { id: 'different-invocation', ruleId: 'another', ruleTitle: '另一次筛选', mode: 'top', value: 1, threshold: 0.5,
+      candidates: [{ name: 'unrelated-candidate', score: 1, rank: 1, selected: true }] }]
+    await React.act(async () => render())
+    const selection = dialog.querySelector('[data-candidate-selection="skills-one"]')
+    assert.match(selection.textContent, /候选 51 项 · 保留 2 项 · 剔除 49 项/)
+    assert.match(selection.textContent, /最低相关性分数: 50%/)
+    assert.match(selection.textContent, /#1 candidate-0.*100% · 保留/)
+    assert.doesNotMatch(selection.textContent, /unrelated-candidate/)
+    assert.equal(selection.querySelectorAll('li').length, 50)
+    await React.act(async () => selection.querySelector('button').click())
+    assert.equal(selection.querySelectorAll('li').length, 51)
+    assert.match(selection.textContent, /没有逐项文字理由/)
+    stages.selections[0].action = 'inject-extra'
+    await React.act(async () => render())
+    assert.match(selection.textContent, /候选 51 项 · 选中 2 项 · 未选中 49 项/)
+    assert.doesNotMatch(selection.textContent, /剔除/)
     assert.match(callDetails, /dsh-jev-context-gate/)
     assert.match(callDetails, /6 秒/)
     assert.match(callDetails, /1,000 毫秒/)

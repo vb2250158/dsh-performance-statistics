@@ -84,3 +84,5 @@ After a hot install, existing preset revisions retain their registered listeners
 Retry waiting ends when the next request starts. Subsequent model waiting and output have separate timings. The upgraded projection replays the original log without changing stored session records.
 
 The second dialog row shows the current session title on the left and the scope, turn count and step count on the right. Renames update immediately and long titles wrap.
+
+Expanded candidate-selection calls show identities, relevance scores, ranks, actual selection outcomes and the rule parameters used for that invocation. Candidate lists expand in batches. Older logs explicitly report missing diagnostics; batch requests do not provide individual timings or written reasons.

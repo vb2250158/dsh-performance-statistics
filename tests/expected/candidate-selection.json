@@ -1,0 +1,18 @@
+[
+  {
+    "id": "one",
+    "turn": 0,
+    "step": 1,
+    "ruleId": "skills",
+    "ruleTitle": "Skills",
+    "operation": "skill-catalog",
+    "mode": "top",
+    "value": 1,
+    "action": "prune",
+    "threshold": 0.5,
+    "candidates": [
+      { "name": "kept", "score": 0.9, "rank": 1, "selected": true },
+      { "name": "removed", "score": 0.1, "rank": 2, "selected": false }
+    ]
+  }
+]

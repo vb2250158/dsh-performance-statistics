@@ -60,7 +60,8 @@ export function installSessionTimingObserver(ctx, appendPluginRecord = (session,
         ...(operation.role === undefined ? {} : { role: operation.role }),
         ...(operation.provider === undefined ? {} : { provider: operation.provider }),
         ...(operation.model === undefined ? {} : { model: operation.model }),
-        ...(operation.transport === undefined ? {} : { transport: operation.transport }) }) }
+        ...(operation.transport === undefined ? {} : { transport: operation.transport }),
+        ...(operation.selectionId === undefined ? {} : { selectionId: operation.selectionId }) }) }
     record(position, { ...value, phase: 'start' })
     let failed = true
     try {
@@ -119,7 +120,8 @@ export function installSessionTimingObserver(ctx, appendPluginRecord = (session,
       ...(options.purpose === undefined ? {} : { purpose: options.purpose }),
       ...(operation === undefined ? {} : { plugin: operation.plugin,
         ...(operation.operation === undefined ? {} : { operation: operation.operation }),
-        ...(operation.rules === undefined ? {} : { rules: operation.rules }) }) }
+        ...(operation.rules === undefined ? {} : { rules: operation.rules }),
+        ...(operation.selectionId === undefined ? {} : { selectionId: operation.selectionId }) }) }
     const callContext = { ...position, phase: role === 'main' ? 'mainModel' : 'auxiliaryModel' }
     return (async function* () {
       record(position, { ...value, phase: 'start' })

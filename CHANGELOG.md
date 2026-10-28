@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.8
+
+- Expanded candidate-selection calls show identities, relevance scores, ranks, actual selection outcomes and the rule parameters used for that invocation. Candidate lists expand in batches. Older logs explicitly report missing diagnostics; batch requests do not provide individual timings or written reasons.
+
 ## 0.1.7
 
 - Show the live session title on the second dialog row, with scope and counts aligned to the right. Long titles wrap without hiding the counts.

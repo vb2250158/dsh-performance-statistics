@@ -42,6 +42,15 @@ test('explicit pre-step position covers callers outside the enclosing async cont
   f.dispose(); assert.equal(f.ctx.get('agentPreStepTiming'), undefined)
 })
 
+test('selection invocation ids survive native and ordinary helper request timing', async () => {
+  const f = fixture(); installSessionTimingObserver(f.ctx, f.append)
+  const timing = f.ctx.get('chatStageTiming')
+  await f.ctx.get('agentPreStepTiming').run({ agent: f.agents[0], turn: 1, step: 1 }, { plugin: 'gate', operation: 'before' },
+    () => timing.request({ plugin: 'gate', operation: 'skill-catalog', provider: 'fixture', model: 'local', selectionId: 'selection-one' }, async () => 'ok'))
+  assert.ok(f.records.some(row => row.data.role === 'auxiliary' && row.data.selectionId === 'selection-one' && row.data.phase === 'end'))
+  f.dispose()
+})
+
 test('non-streaming native decisions are auxiliary requests with their own route and enclosing stage', async () => {
   const f = fixture(); installSessionTimingObserver(f.ctx, f.append)
   const result = { probabilities: { yes: 1 } }, failure = new Error('native failure')
@@ -85,13 +94,14 @@ test('meters concurrent pre-step helper models in the correct sessions without r
 test('caller labels survive lazy iteration and each helper request retains its own rule and latency', async () => {
   const f = fixture(); installSessionTimingObserver(f.ctx, f.append)
   const chunk = { type: 'text-delta', text: 'private-result' }, rule = { id: 'skills', title: 'Skill relevance' }
-  const operation = { plugin: 'fixture-gate', operation: 'skill-catalog', rules: [rule] }
+  const operation = { plugin: 'fixture-gate', operation: 'skill-catalog', rules: [rule], selectionId: 'ordinary-selection' }
   await f.invoke('agent/pre-step', [{ agent: f.agents[0], turn: 0, step: 1 }], async () => {
     const stream = f.ctx.get('chatStageTiming').stream(operation, () => f.invoke('llm/stream', [{ provider: 'fixture', model: 'judge' }], async function* () { yield chunk }))
     for await (const value of stream) assert.strictEqual(value, chunk)
   })
   const call = f.records.find(row => row.data.phase === 'end' && row.data.role === 'auxiliary').data
   assert.equal(call.plugin, operation.plugin); assert.equal(call.operation, operation.operation)
+  assert.equal(call.selectionId, 'ordinary-selection')
   assert.deepEqual(call.rules, [rule]); assert.equal(call.parentKind, 'preStep')
   assert.equal(call.provider, 'fixture'); assert.equal(call.model, 'judge')
   assert.doesNotMatch(JSON.stringify(f.records), /private-result/)

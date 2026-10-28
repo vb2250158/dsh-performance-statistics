@@ -22,6 +22,22 @@ const message = (time, first, type = 'text-chunks') => event('assistant/message'
 const fold = events => events.reduce((state, row) => projection.stateSchema.parse(projection.apply(state, row)), projection.init())
 const total = view => Object.values(view.phases).reduce((sum, value) => sum + value, 0)
 
+test('candidate diagnostics join by invocation id without changing elapsed timings or accepting malformed rows', () => {
+  const selection = id => ({ ...event('plugin:dsh-jev-context-gate/catalog-selection', 45, { id, ruleId: 'skills', ruleTitle: 'Skills',
+    operation: 'skill-catalog', mode: 'top', value: 1, threshold: 0.5, action: 'prune',
+    candidates: [{ name: 'kept', score: 0.9, rank: 1, selected: true }, { name: 'removed', score: 0.1, rank: 2, selected: false }] }), ignorable: true })
+  const events = [event('turn/start', 0), span('auxiliaryModel', 10, 40, { role: 'auxiliary', selectionId: 'one' }), selection('one'),
+    { ...selection('bad'), data: { ...selection('bad').data, candidates: [{ name: 'invalid', score: 9, rank: 1, selected: true }] } },
+    { ...selection('wrong-turn'), data: { ...selection('wrong-turn').data, turn: 4 } }, event('turn/end', 50)]
+  const view = fold(events).view
+  assert.equal(view.calls[0].selectionId, 'one')
+  assert.deepEqual(view.selections.map(row => row.id), ['one'])
+  assert.deepEqual(view.selections, JSON.parse(readFileSync(new URL('./expected/candidate-selection.json', import.meta.url), 'utf8')))
+  assert.equal(view.closedMs, 50)
+  assert.equal(total(view), 50)
+  assert.equal(fold([event('turn/start', 0), event('turn/end', 50)]).view.selections.length, 0)
+})
+
 test('recorded preprocessing replays into named child pies and a separate native request', () => {
   const { view } = fold([event('turn/start', 0),
     span('preStep', 10, 50, { id: 'skills', plugin: 'skills', operation: 'skill-snapshot' }),

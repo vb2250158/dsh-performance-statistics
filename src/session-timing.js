@@ -27,7 +27,7 @@ export function sessionTimingRecordSchema(z) {
     detail: z.string().optional(), role: z.enum(['main', 'auxiliary']).optional(), failed: z.boolean().optional(),
     provider: z.string().optional(), model: z.string().optional(), parentKind: z.string().optional(), purpose: z.string().optional(),
     plugin: z.string().optional(), operation: z.string().optional(), rules: z.array(z.object({ id: z.string(), title: z.string().optional() })).optional(),
-    transport: z.enum(['native-decisions']).optional(),
+    transport: z.enum(['native-decisions']).optional(), selectionId: z.string().optional(),
   }).refine(value => value.phase !== 'end' || (value.endTime !== undefined && value.endTime >= value.startTime))
 }
 
@@ -157,11 +157,16 @@ export function createSessionTimingProjection(z, runFirstTokenTime) {
   const detailSchema = z.object({ kind: z.enum(SESSION_TIMING_KINDS), name: z.string(), milliseconds: time,
     calls: time, failed: time })
   const recordSchema = sessionTimingRecordSchema(z)
+  const selectionSchema = z.object({ id: z.string(), turn: time, step: time, ruleId: z.string(), ruleTitle: z.string(),
+    operation: z.string(), mode: z.enum(['top', 'bottom', 'score-above', 'score-below']), value: z.number().finite(), action: z.enum(['prune', 'inject-extra']),
+    threshold: z.number().finite().min(0).max(1).optional(),
+    candidates: z.array(z.object({ name: z.string(), label: z.string().optional(), score: z.number().finite().min(0).max(1),
+      rank: z.number().int().positive(), selected: z.boolean() })) })
   const workSchema = z.object({ kind: z.enum(SESSION_TIMING_KINDS), operationId: z.string(), milliseconds: time,
       plugin: z.string().optional(), operation: z.string().optional(), detail: z.string().optional(),
       provider: z.string().optional(), model: z.string().optional(), turn: time, step: time })
   const viewSchema = z.object({ closedMs: time, turns: time, firstOutputMs: time, firstOutputTurns: time, phases: z.record(z.string(), time),
-    details: z.array(detailSchema), calls: z.array(recordSchema), operations: z.array(recordSchema), work: z.array(workSchema), measuredSpans: time, incompleteSpans: time })
+    details: z.array(detailSchema), calls: z.array(recordSchema), operations: z.array(recordSchema), work: z.array(workSchema), selections: z.array(selectionSchema), measuredSpans: time, incompleteSpans: time })
   const hookStart = z.object({ handlerId: z.string(), point: z.string(), turn: z.number() })
   const hookEnd = z.object({ handlerId: z.string(), turn: z.number(), durationMs: time, outcome: z.string() })
   const openSchema = z.object({ turn: time, start: time, phase: z.enum(SESSION_TIMING_KINDS), cursor: time,
@@ -169,20 +174,26 @@ export function createSessionTimingProjection(z, runFirstTokenTime) {
     spans: z.array(spanSchema), details: z.record(z.string(), detailSchema), calls: z.array(recordSchema), operations: z.array(recordSchema), measuredSpans: time,
     tools: z.record(z.string(), z.object({ start: time, name: z.string() })),
     compactions: z.record(z.string(), time), hooks: z.record(z.string(), z.object({ start: time, point: z.string(), parentKind: z.string().optional() })),
-    pending: z.record(z.string(), recordSchema),
+    pending: z.record(z.string(), recordSchema), selections: z.array(selectionSchema),
   })
   return {
-    key: 'chatSessionTiming', stateVersion: 5,
+    key: 'chatSessionTiming', stateVersion: 6,
     stateSchema: z.object({ view: viewSchema, open: openSchema.nullable(), details: z.record(z.string(), detailSchema) }),
-    init: () => ({ view: { closedMs: 0, turns: 0, firstOutputMs: 0, firstOutputTurns: 0, phases: {}, details: [], calls: [], operations: [], work: [], measuredSpans: 0, incompleteSpans: 0 }, open: null, details: {} }),
+    init: () => ({ view: { closedMs: 0, turns: 0, firstOutputMs: 0, firstOutputTurns: 0, phases: {}, details: [], calls: [], operations: [], work: [], selections: [], measuredSpans: 0, incompleteSpans: 0 }, open: null, details: {} }),
     apply(state, event) {
       if (event.type === 'turn/start') return { ...state, open: { turn: event.data.turn, start: event.time,
         phase: 'turnPrepare', cursor: event.time, step: null, firstOutputAt: null, spans: [], details: {}, calls: [], operations: [], measuredSpans: 0,
-        tools: {}, compactions: {}, hooks: {}, pending: {} } }
+        tools: {}, compactions: {}, hooks: {}, pending: {}, selections: [] } }
       let open = state.open
       if (open === null) return state
       if (event.data?.turn !== undefined && event.data.turn !== open.turn) return state
       switch (event.type) {
+        case 'plugin:dsh-jev-context-gate/catalog-selection': {
+          const parsed = selectionSchema.safeParse(event.data)
+          if (!parsed.success || event.ignorable !== true) return state
+          open = { ...open, selections: [...open.selections, parsed.data] }
+          break
+        }
         case 'step/start':
           open = { ...move(open, 'requestPrepare', event.time), step: { number: event.data.step, start: event.time } }
           break
@@ -291,7 +302,7 @@ export function createSessionTimingProjection(z, runFirstTokenTime) {
             firstOutputTurns: state.view.firstOutputTurns + Number(open.firstOutputAt !== null),
             turns: state.view.turns + 1, phases, details: Object.values(details).sort((a, b) => b.milliseconds - a.milliseconds), calls: [...state.view.calls, ...open.calls],
             operations: [...state.view.operations, ...open.operations],
-            work: [...state.view.work, ...work],
+            work: [...state.view.work, ...work], selections: [...state.view.selections, ...open.selections],
             measuredSpans: state.view.measuredSpans + open.measuredSpans,
             incompleteSpans: state.view.incompleteSpans + Object.values(open.pending).filter(row => row.kind !== 'turnStopping').length } }
         }
