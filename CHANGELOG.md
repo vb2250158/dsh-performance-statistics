@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.10
+
+- Inspect each Rabi lifecycle hook with elapsed time, HTTP status and uncertain, blocked or continued outcomes. Drill into connection discovery, identity checks, API requests and reported server steps; old logs explicitly show unavailable detail.
+- Replay timing projection revision 7. Nested server and transport readings share the same exclusive interval, so child charts add up to their parent without inflating turn time. Malformed optional substeps do not discard a valid hook record.
+- Verified with keyless timing replay, built-client DOM interaction, connection/lifecycle regression tests and isolated Host smoke.
+
 ## 0.1.9
 
 - Keep candidate identities visible in score lists; descriptions remain optional hover text.

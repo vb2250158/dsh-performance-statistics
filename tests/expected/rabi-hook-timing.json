@@ -1,0 +1,6 @@
+[
+  { "path": ["SessionStart"], "milliseconds": 100 },
+  { "path": ["Stop", "host-discovery"], "milliseconds": 100 },
+  { "path": ["Stop", "manager-request"], "milliseconds": 200 },
+  { "path": ["Stop", "manager-request", "plan-followup"], "milliseconds": 500 }
+]

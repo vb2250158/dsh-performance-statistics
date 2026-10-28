@@ -20,6 +20,10 @@ No historical log conversion is needed. The plugin reads legacy `plugin:dsh-chat
 
 ## Measurements
 
+Rabi hook charts drill down through plugin, lifecycle event, connection/request and server steps. Selecting the hook stage immediately lists individual durations, HTTP statuses and successful, failed, blocked, continued or uncertain outcomes. `dsh-rabiroute-agent >=0.13.42` captures endpoint hints, Host status queries, pre/post-request identity checks and API requests. A timing-capable Rabi Manager also reports plan follow-up, reply history, change reminders, plan completion and delivery.
+
+Older logs retain their recorded event and total duration, with an explicit notice when internal readings were not captured. Relative server timings occupy their enclosing request interval; remaining request time stays unattributed. Every child chart partitions its parent's exclusive time. Projection revision 7 replays existing records without rewriting historical Sessions.
+
 The stage breakdown covers input and prompt preparation, model selection, preprocessing, request preparation, context checks and finalization, auxiliary requests, first-token wait, reasoning/answer/tool-argument output, stream and message commit, tool dispatch/checks/execution/postprocessing, result commit, step transitions, turn stopping, compaction, Rabi hooks and retries.
 
 Each auxiliary call shows its plugin, purpose, configured rule names and IDs, route, start time, total duration, first-token wait, time after the first token, and failure or cancellation state. Tool and hook names appear in child pies.

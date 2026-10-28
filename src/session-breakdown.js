@@ -16,22 +16,21 @@ export function sessionBreakdown(stages) {
     if (!owner) { owner = { key: plugin, plugin, label: plugin, milliseconds: 0, children: [], callIds: [] }; phase.children.push(owner) }
     owner.milliseconds += work.milliseconds
     if (work.operationId) { phase.callIds.push(work.operationId); owner.callIds.push(work.operationId) }
-    if (work.operation) {
-      let operation = owner.children.find(node => node.key === work.operation)
-      if (!operation) { operation = { key: work.operation, operation: work.operation, plugin, milliseconds: 0, children: [], callIds: [] }; owner.children.push(operation) }
+    let parent = owner
+    for (const key of work.operationPath ?? (work.operation ? [work.operation] : [])) {
+      let operation = parent.children.find(node => node.key === key)
+      if (!operation) { operation = { key, operation: key, plugin, milliseconds: 0, children: [], callIds: [] }; parent.children.push(operation) }
       operation.milliseconds += work.milliseconds
       if (work.operationId) operation.callIds.push(work.operationId)
+      parent = operation
     }
   }
-  for (const phase of phases) {
-    for (const owner of phase.children) {
-      if (owner.children.length === 0) continue
-      const remainder = owner.milliseconds - owner.children.reduce((sum, node) => sum + node.milliseconds, 0)
-      if (remainder > 0) owner.children.push({ key: 'unrecorded', missing: true, milliseconds: remainder, children: [], callIds: [] })
-    }
-    if (phase.children.length === 0) continue
-    const remainder = phase.milliseconds - phase.children.reduce((sum, node) => sum + node.milliseconds, 0)
-    if (remainder > 0) phase.children.push({ key: 'unrecorded', missing: true, milliseconds: remainder, children: [], callIds: [] })
+  const complete = node => {
+    if (node.children.length === 0) return
+    for (const child of node.children) complete(child)
+    const remainder = node.milliseconds - node.children.reduce((sum, child) => sum + child.milliseconds, 0)
+    if (remainder > 0) node.children.push({ key: 'unrecorded', missing: true, milliseconds: remainder, children: [], callIds: node.callIds })
   }
+  for (const phase of phases) complete(phase)
   return phases
 }

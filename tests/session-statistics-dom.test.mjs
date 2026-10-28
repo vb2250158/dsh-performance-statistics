@@ -148,6 +148,37 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     assert.equal(dialog.querySelectorAll('svg[role="img"]').length, 1)
     assert.equal(dialog.querySelectorAll('[data-auxiliary-call]').length, 0)
 
+    stages = { ...stages, phases: { rabiHook: 1000 }, closedMs: 1000, operations: [
+      { id: 'old-hook', kind: 'rabiHook', hookId: 'old', operation: 'SessionStart', operationPath: ['SessionStart'],
+        startTime: 0, endTime: 200, turn: 1, step: 1, statusCode: 200, outcome: 'passed' },
+      { id: 'stop-hook', kind: 'rabiHook', hookId: 'stop', operation: 'Stop', operationPath: ['Stop'],
+        startTime: 200, endTime: 1000, turn: 1, step: 1, statusCode: 503, outcome: 'failed', failed: true, uncertain: true },
+      { id: 'stop-host', kind: 'rabiHook', hookId: 'stop', operationPath: ['Stop', 'host-discovery'], startTime: 200, endTime: 300 },
+      { id: 'stop-server', kind: 'rabiHook', hookId: 'stop', operationPath: ['Stop', 'manager-request', 'plan-completion'], startTime: 300, endTime: 1000 },
+    ], work: [
+      { kind: 'rabiHook', plugin: 'dsh-rabiroute-agent', operationId: 'old-hook', operationPath: ['SessionStart'], milliseconds: 200 },
+      { kind: 'rabiHook', plugin: 'dsh-rabiroute-agent', operationId: 'stop-host', operationPath: ['Stop', 'host-discovery'], milliseconds: 100 },
+      { kind: 'rabiHook', plugin: 'dsh-rabiroute-agent', operationId: 'stop-server', operationPath: ['Stop', 'manager-request', 'plan-completion'], milliseconds: 700 },
+    ] }
+    await React.act(async () => render())
+    await React.act(async () => rootLegend('rabiHook').click())
+    assert.equal(dialog.querySelectorAll('[data-hook-call]').length, 2)
+    assert.match(dialog.querySelector('[data-hook-call="old"]').textContent, /会话开始.*200 毫秒.*HTTP 状态: 200.*内部连接和后台步骤未采集/s)
+    assert.match(dialog.querySelector('[data-hook-call="stop"]').textContent, /回复结束.*800 毫秒.*处理结果待核对.*HTTP 状态: 503/s)
+    await React.act(async () => dialog.querySelector('[data-hook-call="stop"] button').click())
+    assert.match(dialog.querySelector('[data-hook-call="stop"]').textContent, /查询 Host 状态.*100 毫秒.*Rabi 接口请求 \/ 计划完成检查与回传.*700 毫秒/s)
+    assert.match(dialog.querySelector('[data-hook-call="stop"]').textContent, /父子步骤可能嵌套/)
+    await React.act(async () => dialog.querySelector('[data-pie-level="1"] [data-stage-legend="dsh-rabiroute-agent"]').click())
+    await React.act(async () => dialog.querySelector('[data-pie-level="2"] [data-stage-legend="Stop"]').click())
+    assert.match(dialog.querySelector('[data-pie-level="3"]').textContent, /查询 Host 状态.*100 毫秒/s)
+    await React.act(async () => dialog.querySelector('[data-pie-level="3"] [data-stage-legend="manager-request"]').click())
+    assert.match(dialog.querySelector('[data-pie-level="4"]').textContent, /计划完成检查与回传.*700 毫秒/s)
+    assert.equal(dialog.querySelectorAll('[data-hook-call]').length, 1)
+    t = translate('en')
+    await React.act(async () => render())
+    assert.match(dialog.textContent, /Individual Rabi hooks/)
+    assert.match(dialog.querySelector('[data-pie-level="4"]').textContent, /Plan completion checks and delivery/)
+    t = translate('zh')
     stats = { ...stats, toolMs: 35600 }
     await React.act(async () => render())
     assert.ok(Math.abs(fractions().reduce((sum, value) => sum + value, 0) - 1) < 0.000001, 'Parallel work totals cannot inflate pie shares')

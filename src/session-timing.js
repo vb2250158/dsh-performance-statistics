@@ -27,6 +27,8 @@ export function sessionTimingRecordSchema(z) {
     detail: z.string().optional(), role: z.enum(['main', 'auxiliary']).optional(), failed: z.boolean().optional(),
     provider: z.string().optional(), model: z.string().optional(), parentKind: z.string().optional(), purpose: z.string().optional(),
     plugin: z.string().optional(), operation: z.string().optional(), rules: z.array(z.object({ id: z.string(), title: z.string().optional() })).optional(),
+    operationPath: z.array(z.string()).optional(), hookId: z.string().optional(),
+    statusCode: z.number().int().nonnegative().optional(), outcome: z.string().optional(), uncertain: z.boolean().optional(),
     transport: z.enum(['native-decisions']).optional(), selectionId: z.string().optional(),
   }).refine(value => value.phase !== 'end' || (value.endTime !== undefined && value.endTime >= value.startTime))
 }
@@ -164,11 +166,14 @@ export function createSessionTimingProjection(z, runFirstTokenTime) {
       rank: z.number().int().positive(), selected: z.boolean() })) })
   const workSchema = z.object({ kind: z.enum(SESSION_TIMING_KINDS), operationId: z.string(), milliseconds: time,
       plugin: z.string().optional(), operation: z.string().optional(), detail: z.string().optional(),
+      operationPath: z.array(z.string()).optional(), hookId: z.string().optional(),
       provider: z.string().optional(), model: z.string().optional(), turn: time, step: time })
   const viewSchema = z.object({ closedMs: time, turns: time, firstOutputMs: time, firstOutputTurns: time, phases: z.record(z.string(), time),
     details: z.array(detailSchema), calls: z.array(recordSchema), operations: z.array(recordSchema), work: z.array(workSchema), selections: z.array(selectionSchema), measuredSpans: time, incompleteSpans: time })
   const hookStart = z.object({ handlerId: z.string(), point: z.string(), turn: z.number() })
   const hookEnd = z.object({ handlerId: z.string(), turn: z.number(), durationMs: time, outcome: z.string() })
+  const hookTiming = z.object({ path: z.array(z.string().regex(/^[a-z][a-z0-9-]{0,79}$/u)).min(1).max(6),
+    startMs: time, durationMs: time, failed: z.boolean().optional() })
   const openSchema = z.object({ turn: time, start: time, phase: z.enum(SESSION_TIMING_KINDS), cursor: time,
     step: z.object({ number: time, start: time, contextAt: time.optional(), dispatchAt: time.optional() }).nullable(), firstOutputAt: time.nullable(),
     spans: z.array(spanSchema), details: z.record(z.string(), detailSchema), calls: z.array(recordSchema), operations: z.array(recordSchema), measuredSpans: time,
@@ -177,7 +182,7 @@ export function createSessionTimingProjection(z, runFirstTokenTime) {
     pending: z.record(z.string(), recordSchema), selections: z.array(selectionSchema),
   })
   return {
-    key: 'chatSessionTiming', stateVersion: 6,
+    key: 'chatSessionTiming', stateVersion: 7,
     stateSchema: z.object({ view: viewSchema, open: openSchema.nullable(), details: z.record(z.string(), detailSchema) }),
     init: () => ({ view: { closedMs: 0, turns: 0, firstOutputMs: 0, firstOutputTurns: 0, phases: {}, details: [], calls: [], operations: [], work: [], selections: [], measuredSpans: 0, incompleteSpans: 0 }, open: null, details: {} }),
     apply(state, event) {
@@ -269,14 +274,30 @@ export function createSessionTimingProjection(z, runFirstTokenTime) {
           const parsed = hookEnd.safeParse(event.data)
           if (!parsed.success || event.ignorable !== true) return state
           const row = parsed.data, invoked = Object.hasOwn(open.hooks, row.handlerId) ? open.hooks[row.handlerId] : undefined
-          if (invoked === undefined) return state
+          if (invoked === undefined || row.turn !== open.turn) return state
           const hooks = { ...open.hooks }; delete hooks[row.handlerId]
+          const id = `rabi-${row.handlerId}-${invoked.start}`
           open = detail({ ...addSpan(open, 'rabiHook', invoked.start, event.time, `rabi-${row.handlerId}-${invoked.start}`), hooks }, 'rabiHook', invoked.point,
             row.durationMs, row.outcome === 'failed')
-          open = { ...open, operations: [...open.operations, { id: `rabi-${row.handlerId}-${invoked.start}`, phase: 'end', kind: 'rabiHook',
+          open = { ...open, operations: [...open.operations, { id, phase: 'end', kind: 'rabiHook',
             turn: open.turn, step: open.step?.number ?? 0, startTime: invoked.start, endTime: event.time, detail: invoked.point,
             plugin: 'dsh-rabiroute-agent', operation: invoked.point, failed: row.outcome === 'failed',
+            operationPath: [invoked.point], hookId: row.handlerId, outcome: row.outcome,
+            ...(Number.isInteger(event.data.statusCode) && event.data.statusCode >= 0 ? { statusCode: event.data.statusCode } : {}),
+            ...(typeof event.data.uncertain === 'boolean' ? { uncertain: event.data.uncertain } : {}),
             ...(invoked.parentKind === undefined ? {} : { parentKind: invoked.parentKind }) }] }
+          for (const [index, raw] of (Array.isArray(event.data.timings) ? event.data.timings.slice(0, 256) : []).entries()) {
+            const timing = hookTiming.safeParse(raw)
+            if (!timing.success) continue
+            const item = timing.data, childId = `${id}-${index}`
+            const startTime = Math.min(event.time, invoked.start + item.startMs)
+            const endTime = Math.min(event.time, startTime + item.durationMs)
+            if (endTime <= startTime) continue
+            open = addSpan(open, 'rabiHook', startTime, endTime, childId)
+            open = { ...open, operations: [...open.operations, { id: childId, phase: 'end', kind: 'rabiHook',
+              turn: open.turn, step: open.step?.number ?? 0, startTime, endTime, plugin: 'dsh-rabiroute-agent',
+              operation: item.path.at(-1), operationPath: [invoked.point, ...item.path], hookId: row.handlerId, failed: item.failed === true }] }
+          }
           break
         }
         case 'turn/end': {
@@ -288,7 +309,7 @@ export function createSessionTimingProjection(z, runFirstTokenTime) {
           const work = exclusive.work.flatMap(row => {
             const record = records.get(row.operationId)
             if (record === undefined) return []
-            const metadata = Object.fromEntries(['plugin', 'operation', 'detail', 'provider', 'model', 'turn', 'step']
+            const metadata = Object.fromEntries(['plugin', 'operation', 'operationPath', 'hookId', 'detail', 'provider', 'model', 'turn', 'step']
               .filter(key => record[key] !== undefined).map(key => [key, record[key]]))
             return [{ ...row, ...metadata }]
           })

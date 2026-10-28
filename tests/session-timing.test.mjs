@@ -22,6 +22,32 @@ const message = (time, first, type = 'text-chunks') => event('assistant/message'
 const fold = events => events.reduce((state, row) => projection.stateSchema.parse(projection.apply(state, row)), projection.init())
 const total = view => Object.values(view.phases).reduce((sum, value) => sum + value, 0)
 
+test('Hook event, connection and server pies partition one interval and retain old and malformed diagnostic records', () => {
+  const invoked = (handlerId, point, time) => ({ ...event('plugin:dsh-rabiroute-agent/hook-invoked', time, { handlerId, point }), ignorable: true })
+  const result = (handlerId, durationMs, time, timings) => ({ ...event('plugin:dsh-rabiroute-agent/hook-result', time,
+    { handlerId, durationMs, outcome: 'passed', statusCode: 200, uncertain: false, timings }), ignorable: true })
+  const { view } = fold([event('turn/start', 0), invoked('old', 'SessionStart', 10), result('old', 100, 110),
+    invoked('new', 'Stop', 200), result('new', 800, 1000, [
+      { path: ['host-discovery'], startMs: 0, durationMs: 100 },
+      { path: ['manager-request'], startMs: 100, durationMs: 700 },
+      { path: ['manager-request', 'plan-followup'], startMs: 200, durationMs: 500 },
+      { path: ['invalid'], startMs: -5, durationMs: 100 }, null,
+    ]), event('turn/end', 1010)])
+  assert.equal(view.closedMs, 1010); assert.equal(total(view), 1010); assert.equal(view.phases.rabiHook, 900)
+  const hook = sessionBreakdown(view).find(row => row.key === 'rabiHook').children[0]
+  const stop = hook.children.find(row => row.key === 'Stop')
+  assert.equal(stop.milliseconds, 800)
+  assert.deepEqual(stop.children.map(row => [row.key, row.milliseconds]), [['host-discovery', 100], ['manager-request', 700]])
+  assert.deepEqual(stop.children[1].children.map(row => [row.key, row.milliseconds]), [['plan-followup', 500], ['unrecorded', 200]])
+  assert.equal(hook.children.find(row => row.key === 'SessionStart').children.length, 0)
+  assert.equal(view.operations.filter(row => row.statusCode === 200).length, 2)
+  assert.equal(view.operations.some(row => row.operation === 'invalid'), false)
+  assert.deepEqual(view.work.filter(row => row.kind === 'rabiHook').map(row => ({ path: row.operationPath, milliseconds: row.milliseconds })),
+    JSON.parse(readFileSync(new URL('./expected/rabi-hook-timing.json', import.meta.url), 'utf8')))
+  const check = node => { if (node.children.length) { assert.equal(node.children.reduce((sum, row) => sum + row.milliseconds, 0), node.milliseconds); node.children.forEach(check) } }
+  check(hook)
+})
+
 test('candidate diagnostics join by invocation id without changing elapsed timings or accepting malformed rows', () => {
   const selection = id => ({ ...event('plugin:dsh-jev-context-gate/catalog-selection', 45, { id, ruleId: 'skills', ruleTitle: 'Skills',
     operation: 'skill-catalog', mode: 'top', value: 1, threshold: 0.5, action: 'prune',
