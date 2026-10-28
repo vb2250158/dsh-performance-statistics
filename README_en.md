@@ -1,7 +1,5 @@
 # DSH Performance Statistics
 
-Pre-step listeners registered after activation retain their own preparation and completion time, excluding downstream `next()` work and the union of separately measured cooperative intervals. Partial cooperative timings do not discard the listener's remaining work.
-
 [简体中文](README.md) · MIT
 
 An independent performance statistics plugin for DeepSeek Harness. Click the statistics pill below the composer for a timing pie, exact stage readings, individual auxiliary model calls, first-output latency, output speed and token usage. Durations above one second use seconds with up to three decimal places; shorter durations use milliseconds.
@@ -35,6 +33,8 @@ Each millisecond belongs to one pie stage. Nested measurements take priority and
 Selecting a slice or legend appends its child pie below; selecting a plugin shows its operations. Parent pies remain visible, changing an ancestor clears its previous descendants, and tables are removed. Durations and percentages share one position; measurement descriptions appear below names.
 
 Projection version 4 replays recorded operation labels. Historical enclosing-only intervals remain unidentified. Finer cooperative preprocessing labels use the optional public `agentPreStepTiming` service and the [host instrumentation patch](host-patches/pre-step-timing.patch). Jev-owned operations require Jev 0.1.41 or later. Native probability API requests are measured separately as auxiliary calls, including model, purpose and rules; non-streaming replies have no fabricated first-token timestamp. The patch instruments instructions, skills, session references, time context and optional tmux queries without changing waterfall decisions or the Agent loop.
+
+Pre-step listeners registered after activation retain their own preparation and completion time, excluding downstream `next()` work and the union of separately measured cooperative intervals. Partial cooperative timings do not discard the listener's remaining work.
 
 ## Privacy
 

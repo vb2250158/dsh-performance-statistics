@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.13
+
+- Retain a pre-step listener's own preparation and completion time when it measures only some internal operations. Subtract the union of measured intervals and downstream work, rather than omitting the whole listener. Preserve return values, error identity and exclusive chart totals. Independently verified with 29 focused regressions and an isolated production-loop Host smoke.
+
 ## 0.1.12
 
 - Keep stacked charts in normal flow on narrow screens so scrolling never pins a pie over its legend or hook readings. Desktop charts retain their sticky layout. Verified keyboard expansion, 460-pixel viewport fit and light/dark screenshots with real public primitives.
