@@ -9,7 +9,7 @@ An independent performance statistics plugin for DeepSeek Harness. Click the sta
 Targets the public DSH 0.2.1 plugin APIs; verified with 0.2.1-rc.3. Install this repository through the DSH plugin manager or supported CLI:
 
 ```sh
-dsh plugin --profile web add github:vb2250158/dsh-performance-statistics#v0.1.4
+dsh plugin --profile web add github:vb2250158/dsh-performance-statistics#v0.1.7
 ```
 
 Enable **Performance statistics**, reload the page, send a message, and open the statistics pill after the turn ends. Expand auxiliary call cards or select a pie slice or legend to filter stages.
@@ -82,3 +82,5 @@ Older hosts also use the public `internal/listener` registration interception fo
 After a hot install, existing preset revisions retain their registered listeners. An authenticated Connection POST to `/api/dsh-performance-statistics/refresh-presets` refreshes preset declarations through the public Fiber lifecycle. Configuration remains unchanged; existing Agents retain their revisions, and later sessions use the new revision. A failed refresh returns 503; inspect preset activation diagnostics before creating another session. Historical measurements cannot be recovered.
 
 Retry waiting ends when the next request starts. Subsequent model waiting and output have separate timings. The upgraded projection replays the original log without changing stored session records.
+
+The second dialog row shows the current session title on the left and the scope, turn count and step count on the right. Renames update immediately and long titles wrap.

@@ -9,7 +9,7 @@ DeepSeek Harness 的独立性能统计插件。点击输入框下方的统计按
 适用于 DSH 0.2.1 系列公开插件 API，已在 0.2.1-rc.3 验证。通过 DSH 的插件管理器安装本仓库，或使用受支持的 CLI：
 
 ```sh
-dsh plugin --profile web add github:vb2250158/dsh-performance-statistics#v0.1.4
+dsh plugin --profile web add github:vb2250158/dsh-performance-statistics#v0.1.7
 ```
 
 安装后启用 **Performance statistics / 性能统计**，重新打开网页。发送一条消息，轮次结束后点击统计按钮；辅助模型卡片可展开，饼图和图例可点击筛选。
@@ -83,3 +83,5 @@ return ctx.get('agentPreStepTiming')?.run(
 热安装统计插件后，已存在的预设修订不会重新注册监听器。通过已登录的 Connection 向 `/api/dsh-performance-statistics/refresh-presets` 发送 POST，可使用公开 Fiber 生命周期刷新预设声明；配置不变，已有 Agent 保留原修订，后续会话使用新修订。调用失败返回 503，应先检查预设激活诊断；旧历史无法补采。
 
 失败重试的等待在下一次请求开始时结束；后续模型等待和输出分别计时。升级后投影会从原日志重算，原始会话记录不变。
+
+弹窗第二行左侧显示当前会话标题，右侧显示统计范围与轮次、步数；重命名后同步更新，长标题自动换行。

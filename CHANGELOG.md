@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.7
+
+- Show the live session title on the second dialog row, with scope and counts aligned to the right. Long titles wrap without hiding the counts.
+
 ## 0.1.6
 
 - End retry attribution when the next request starts and replay existing logs with projection revision 5, preserving model wait and output as separate stages.

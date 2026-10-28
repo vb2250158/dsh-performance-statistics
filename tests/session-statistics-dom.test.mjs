@@ -65,8 +65,9 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
       {kind:'auxiliaryModel',plugin:'dsh-jev-context-gate',operation:'before',operationId:'second',milliseconds:5000},
     ]
     let t = translate('zh')
+    let sessionTitle = '问候'
     const render = () => root.render(React.createElement(activity.component, { useProjection: name =>
-      name === 'sessionStats' ? stats : name === 'chatSessionTiming' ? stages : name === 'tokenUsage' ? usage : undefined, t }))
+      name === 'title' ? sessionTitle : name === 'sessionStats' ? stats : name === 'chatSessionTiming' ? stages : name === 'tokenUsage' ? usage : undefined, t }))
     await React.act(async () => render())
 
     const trigger = document.querySelector('[data-composer-stat="activity"]')
@@ -76,6 +77,14 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     await React.act(async () => trigger.click())
 
     const dialog = document.querySelector('[role="dialog"]')
+    assert.equal(dialog.querySelector('.dsh-session-statistics-session-title').textContent, '问候')
+    assert.equal(dialog.querySelector('.dsh-session-statistics-session-counts').textContent, '全会话 · 已结束轮次 · 1 轮 · 1 步')
+    sessionTitle = '更新后的会话标题'.repeat(20)
+    await React.act(async () => render())
+    assert.equal(dialog.querySelector('.dsh-session-statistics-session-title').textContent, sessionTitle)
+    sessionTitle = null
+    await React.act(async () => render())
+    assert.equal(dialog.querySelector('.dsh-session-statistics-session-title').textContent, '未命名会话')
     assert.equal(dialog.getAttribute('aria-modal'), 'true')
     assert.match(dialog.textContent, /12 秒/)
     assert.match(dialog.textContent, /3.2 秒/)
