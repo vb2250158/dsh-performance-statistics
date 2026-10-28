@@ -31,6 +31,15 @@ import { apply as installPerformanceStatistics } from './entry.mjs';
 export const inject = ['agentLoop', 'agents', 'llm', 'sessionProjections'];
 export async function apply(ctx) {
   await installPerformanceStatistics(ctx);
+  ctx.on('agent/pre-step', async ({ agent, turn, step }, next) => {
+    await new Promise(done => setTimeout(done, 6));
+    const decision = await next();
+    await ctx.get('agentPreStepTiming').run({ agent, turn, step },
+      { plugin: 'plugin:timing-fixture', operation: 'cooperative-fixture' },
+      () => new Promise(done => setTimeout(done, 6)));
+    await new Promise(done => setTimeout(done, 6));
+    return decision;
+  }, { global: true });
   const requests = [];
   ctx.provide('timingFixture', { requests });
   class Adapter extends LlmAdapter {
@@ -85,6 +94,9 @@ export function apply(ctx) { ctx.provide('timingCaller', { create: id => ctx.age
   assert.ok(ctx.timingFixture.requests.every(options => !('operation' in options) && !('rules' in options)))
   assert.equal(Object.values(state.view.phases).reduce((sum, value) => sum + value, 0), state.view.closedMs)
   assert.ok(state.view.measuredSpans > 0)
+  assert.ok(state.view.operations.some(row => row.operation === 'cooperative-fixture'))
+  const own = state.view.work.filter(row => row.plugin === 'plugin:timing-fixture' && row.operation === 'pre-step-listener')
+  assert.ok(own.reduce((sum, row) => sum + row.milliseconds, 0) >= 10, 'Unmeasured listener preparation and completion stay attributed')
   console.log(JSON.stringify({ passed: true, measuredSpans: state.view.measuredSpans, calls: state.view.calls.length, phases: state.view.phases }))
 } finally {
   await ctx?.fiber.dispose()

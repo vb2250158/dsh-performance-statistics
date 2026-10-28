@@ -25,7 +25,7 @@ function owner(entry) {
  * @param ctx Owning plugin context.
  * @param context Async context shared with cooperative operation meters.
  * @param record Best-effort append of names and timestamps.
- * @returns Marks a listener as cooperatively measured, preventing duplicate readings.
+ * @returns Captures a listener's cooperative intervals so its remaining work stays measured.
  */
 export function installPreStepListenerMeters(ctx, context, record) {
   let registering = false, active = true
@@ -40,7 +40,7 @@ export function installPreStepListenerMeters(ctx, context, record) {
       return this.on(name, async function (payload, next) {
         if (!active) return listener.call(this, payload, next)
         const position = { agent: payload.agent, turn: payload.turn, step: payload.step }
-        const meter = { plugin, cooperative: false }, intervals = []
+        const meter = { plugin, covered: [] }, intervals = []
         let start = Date.now(), delegated = 0, failed = true
         const finish = end => { if (start !== undefined && end > start) intervals.push([start, end]); start = undefined }
         const delegate = async () => {
@@ -55,15 +55,30 @@ export function installPreStepListenerMeters(ctx, context, record) {
           return result
         } finally {
           finish(Date.now())
-          if (active && !meter.cooperative) for (const [startTime, endTime] of intervals) record(position, {
-            id: randomUUID(), phase: 'end', kind: 'preStep', parentKind: 'preStep', plugin, operation, startTime, endTime, failed,
-          })
+          const covered = meter.covered.sort((a, b) => a[0] - b[0])
+          if (active) for (const [left, right] of intervals) {
+            let cursor = left
+            const append = endTime => {
+              if (endTime > cursor) record(position, {
+                id: randomUUID(), phase: 'end', kind: 'preStep', parentKind: 'preStep', plugin, operation,
+                startTime: cursor, endTime, failed,
+              })
+              cursor = Math.max(cursor, endTime)
+            }
+            for (const [startTime, endTime] of covered) {
+              if (endTime <= cursor) continue
+              if (startTime >= right) break
+              append(Math.min(startTime, right))
+              cursor = Math.max(cursor, Math.min(endTime, right))
+            }
+            append(right)
+          }
         }
       }, options)
     } finally { registering = false }
   }, { global: true, prepend: true })
   return plugin => {
     const meter = context.getStore()?.listenerMeter
-    if (meter?.plugin === plugin) meter.cooperative = true
+    if (meter?.plugin === plugin) return (startTime, endTime) => meter.covered.push([startTime, endTime])
   }
 }

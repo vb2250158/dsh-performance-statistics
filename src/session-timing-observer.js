@@ -12,8 +12,7 @@ export function installSessionTimingObserver(ctx, appendPluginRecord = (session,
   const cooperative = installPreStepListenerMeters(ctx, context, record)
   ctx.effect(() => ctx.provide('agentPreStepTiming', {
     run(position, operation, task) {
-      cooperative(operation.plugin)
-      return measure(position, 'preStep', operation.plugin, task, undefined, operation)
+      return measure(position, 'preStep', operation.plugin, task, undefined, operation, cooperative(operation.plugin))
     },
   }))
   // Callers supply operation names separately from model inputs and transport options.
@@ -53,7 +52,7 @@ export function installSessionTimingObserver(ctx, appendPluginRecord = (session,
       if (!warned) { warned = true; ctx.logger.warn('Session stage timing could not be recorded: %s', error instanceof Error ? error.message : String(error)) }
     }
   }
-  async function measure(position, kind, detail, next, rejected, operation) {
+  async function measure(position, kind, detail, next, rejected, operation, measured) {
     const value = { id: randomUUID(), kind, startTime: Date.now(), ...(detail === undefined ? {} : { detail }),
       ...(operation === undefined ? {} : { plugin: operation.plugin, operation: operation.operation, parentKind: operation.parentKind ?? kind,
         ...(operation.rules === undefined ? {} : { rules: operation.rules }),
@@ -68,7 +67,11 @@ export function installSessionTimingObserver(ctx, appendPluginRecord = (session,
       const result = await context.run({ ...position, phase: kind, ...(operation === undefined ? {} : { operation }) }, next)
       failed = rejected?.(result) ?? false
       return result
-    } finally { record(position, { ...value, phase: 'end', endTime: Math.max(value.startTime, Date.now()), failed }) }
+    } finally {
+      const endTime = Math.max(value.startTime, Date.now())
+      measured?.(value.startTime, endTime)
+      record(position, { ...value, phase: 'end', endTime, failed })
+    }
   }
   function bind(agent) {
     if (bindings.has(agent)) return

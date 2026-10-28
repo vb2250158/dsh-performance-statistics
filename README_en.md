@@ -1,5 +1,7 @@
 # DSH Performance Statistics
 
+Pre-step listeners registered after activation retain their own preparation and completion time, excluding downstream `next()` work and the union of separately measured cooperative intervals. Partial cooperative timings do not discard the listener's remaining work.
+
 [简体中文](README.md) · MIT
 
 An independent performance statistics plugin for DeepSeek Harness. Click the statistics pill below the composer for a timing pie, exact stage readings, individual auxiliary model calls, first-output latency, output speed and token usage. Durations above one second use seconds with up to three decimal places; shorter durations use milliseconds.

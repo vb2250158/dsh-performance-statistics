@@ -55,7 +55,7 @@ test('cooperative providers do not produce duplicate legacy intervals and failur
   t.mock.method(Date, 'now', () => now)
   const f = fixture(), owner = f.scope('@deepseek-ai/dsh-agent-instructions'), failure = new Error('fixture failure')
   const stop = owner.on('agent/pre-step', async (_payload, next) => {
-    await next(); now += 20; f.cooperate('@deepseek-ai/dsh-agent-instructions'); return 'result'
+    await next(); const start = now; now += 20; f.cooperate('@deepseek-ai/dsh-agent-instructions')(start, now); return 'result'
   })
   assert.equal(await f.invoke({ agent: {}, turn: 1, step: 1 }, async () => 'result'), 'result')
   assert.deepEqual(f.records, [])
@@ -72,8 +72,42 @@ test('file module identities use package ids without retaining workspace paths o
   t.mock.method(Date, 'now', () => now)
   const f = fixture(), scope = f.scope('file:///private/workspace/custom/lib/index.js')
   scope.fiber.entry.options.id = 'dsh-jev-context-gate'
-  scope.on('agent/pre-step', async () => { now += 20; f.cooperate('dsh-jev-context-gate'); return 'result' })
+  scope.on('agent/pre-step', async () => { const start = now; now += 20; f.cooperate('dsh-jev-context-gate')(start, now); return 'result' })
   assert.equal(await f.invoke({ agent: {}, turn: 1, step: 1 }, async () => 'unused'), 'result')
   assert.deepEqual(f.records, [])
+  f.dispose()
+})
+
+test('partial cooperative readings retain surrounding own work and exclude downstream work', async t => {
+  let now = 100
+  t.mock.method(Date, 'now', () => now)
+  const f = fixture(), owner = f.scope('@deepseek-ai/dsh-agent-instructions')
+  owner.on('agent/pre-step', async (_payload, next) => {
+    now += 5
+    await next()
+    now += 7
+    const measured = f.cooperate('@deepseek-ai/dsh-agent-instructions'), start = now
+    now += 20
+    measured(start, now)
+    now += 11
+    return 'result'
+  })
+  assert.equal(await f.invoke({ agent: {}, turn: 1, step: 1 }, async () => { now += 100; return 'downstream' }), 'result')
+  assert.deepEqual(f.records.map(row => [row.data.startTime, row.data.endTime]), [[100, 105], [205, 212], [232, 243]])
+  f.dispose()
+})
+
+test('overlapping cooperative readings are deducted once and failed own work remains visible', async t => {
+  let now = 100
+  t.mock.method(Date, 'now', () => now)
+  const f = fixture(), owner = f.scope('dsh-jev-context-gate'), failure = new Error('fixture failure')
+  owner.on('agent/pre-step', async () => {
+    const measured = f.cooperate('dsh-jev-context-gate')
+    now = 150
+    measured(110, 130); measured(120, 140)
+    throw failure
+  })
+  await assert.rejects(f.invoke({ agent: {}, turn: 1, step: 1 }, async () => 'unused'), error => error === failure)
+  assert.deepEqual(f.records.map(row => [row.data.startTime, row.data.endTime, row.data.failed]), [[100, 110, true], [140, 150, true]])
   f.dispose()
 })
