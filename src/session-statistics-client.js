@@ -230,15 +230,27 @@ export const sessionStatisticsCss = `
 .dsh-session-statistics-legend button:focus-visible{outline:2px solid var(--dsw-alias-link);outline-offset:2px}
 .dsh-session-statistics-swatch{width:9px;height:9px;border-radius:3px;background:var(--stage-color)}
 .dsh-session-statistics-legend small{display:block;grid-column:2/-1;color:var(--dsw-alias-label-secondary);font-size:11px;margin-top:3px}
+.dsh-session-statistics-legend-name,.dsh-session-statistics-legend-scope{min-width:0;overflow-wrap:anywhere;line-height:1.6}
+.dsh-session-statistics-legend-value{white-space:nowrap;font-variant-numeric:tabular-nums}
 .dsh-session-statistics-operation{display:block;color:var(--dsw-alias-label-secondary);font-size:11px}
 .dsh-session-statistics-table tr[data-selected=true]{background:var(--dsw-alias-interactive-bg-hover)}
 .dsh-session-statistics-call{border:1px solid var(--dsw-alias-border-l2);border-radius:10px;min-width:0;overflow:hidden}
 .dsh-session-statistics-call>button{width:100%;height:auto;justify-content:space-between;text-align:left;white-space:normal;padding:12px;gap:12px}
 .dsh-session-statistics-call-heading{min-width:0;overflow-wrap:anywhere}.dsh-session-statistics-call-heading small{display:block;font-size:11px;color:var(--dsw-alias-label-secondary);margin-top:4px}
+.dsh-session-statistics-call-title{display:flex;align-items:center;gap:8px;min-width:0;flex:1;line-height:1.5;overflow-wrap:anywhere}
+.dsh-session-statistics-call-title strong{min-width:0}.dsh-session-statistics-call-chevron{flex:none;width:12px;color:var(--dsw-alias-label-secondary)}
+.dsh-session-statistics-call-duration{flex:none;white-space:nowrap;font-variant-numeric:tabular-nums}
+.dsh-session-statistics-call-body{display:grid;gap:8px;padding:0 12px 12px;min-width:0}
+.dsh-session-statistics-call-body p{min-width:0;overflow-wrap:anywhere}
+.dsh-session-statistics-hook-details{display:grid;gap:12px;min-width:0;margin-top:4px;padding-top:12px;border-top:1px solid var(--dsw-alias-border-l2)}
 .dsh-session-statistics-call-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:0 12px 12px;margin:0;font-size:12px}
 .dsh-session-statistics-call-metrics>div{min-width:0}.dsh-session-statistics-call-metrics dt{color:var(--dsw-alias-label-secondary);margin-bottom:4px}.dsh-session-statistics-call-metrics dd{margin:0;overflow-wrap:anywhere}
+.dsh-session-statistics-hook-details .dsh-session-statistics-call-metrics{padding:0;gap:10px}
+.dsh-session-statistics-hook-details .dsh-session-statistics-call-metrics>div{padding:10px 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px}
+.dsh-session-statistics-hook-details dt{overflow-wrap:anywhere;line-height:1.5}.dsh-session-statistics-hook-details dd{line-height:1.5;font-weight:600;font-variant-numeric:tabular-nums}
 @media(max-width:650px){.dsh-session-statistics-pie-layout{grid-template-columns:minmax(0,1fr);gap:12px}.dsh-session-statistics-pie{position:static;width:200px}}
 @media(max-width:540px){.dsh-session-statistics-summary{gap:8px}.dsh-session-statistics-summary>div{padding:10px}.dsh-session-statistics-summary dd{font-size:18px}.dsh-session-statistics-token-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dsh-session-statistics-table th,.dsh-session-statistics-table td{padding:8px 4px}.dsh-session-statistics-table th:first-child{width:24%}.dsh-session-statistics-table th:nth-child(2){width:27%}}
+@media(max-width:540px){.dsh-session-statistics-hook-details .dsh-session-statistics-call-metrics{grid-template-columns:minmax(0,1fr)}.dsh-session-statistics-legend button{grid-template-columns:9px minmax(0,1fr)}.dsh-session-statistics-legend-value{grid-column:2;white-space:normal}.dsh-session-statistics-legend small{grid-column:2}}
 `
 
 function statisticsNumber(value, t, digits = 1) {
@@ -332,17 +344,20 @@ function HookCall({ call, steps, t }) {
   const [expanded, setExpanded] = React.useState(false), h = statisticsNode
   return h('div', { className: 'dsh-session-statistics-call', 'data-hook-call': call.hookId },
       h(Button, { onClick: () => setExpanded(value => !value), 'aria-expanded': expanded, 'aria-controls': `hook-${call.id}` },
-        h('strong', null, operationCopy.some(row => row[0] === call.operation) ? t('operation_' + call.operation) : call.operation),
-        h('span', null, statisticsDuration(call.endTime - call.startTime, t))),
+        h('span', { className: 'dsh-session-statistics-call-title' },
+          h('span', { className: 'dsh-session-statistics-call-chevron', 'aria-hidden': true }, expanded ? '▾' : '▸'),
+          h('strong', null, operationCopy.some(row => row[0] === call.operation) ? t('operation_' + call.operation) : call.operation)),
+        h('span', { className: 'dsh-session-statistics-call-duration' }, statisticsDuration(call.endTime - call.startTime, t))),
+      h('div', { className: 'dsh-session-statistics-call-body' },
       h('p', { className: 'dsh-session-statistics-note' }, [t('callPosition', { turn: call.turn, step: call.step }),
         t(call.uncertain ? 'hookUncertain' : call.failed ? 'hookFailed' : call.outcome === 'blocked' ? 'hookBlocked' : call.outcome === 'continued' ? 'hookContinued' : 'hookSucceeded'),
         call.statusCode === undefined ? undefined : `${t('hookHttp')}: ${call.statusCode}`].filter(Boolean).join(' · ')),
       h('p', { className: 'dsh-session-statistics-note' }, t(steps.length ? 'hookMeasured' : 'hookLegacy')),
-      expanded && h('div', { id: `hook-${call.id}` },
+      expanded && h('div', { id: `hook-${call.id}`, className: 'dsh-session-statistics-hook-details' },
         h('dl', { className: 'dsh-session-statistics-call-metrics' }, ...steps.map(step => h('div', { key: step.id },
           h('dt', null, step.operationPath.slice(1).map(operation => operationCopy.some(row => row[0] === operation) ? t('operation_' + operation) : operation).join(' / ')),
           h('dd', null, statisticsDuration(step.endTime - step.startTime, t))))),
-        steps.length > 0 && h('p', { className: 'dsh-session-statistics-note' }, t('hookStepScope'))))
+        steps.length > 0 && h('p', { className: 'dsh-session-statistics-note' }, t('hookStepScope')))))
 }
 
 function HookCalls({ calls, steps, t }) {

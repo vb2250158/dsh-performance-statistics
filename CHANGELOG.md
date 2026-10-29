@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.14
+
+- Keep hook descriptions, status and expanded readings inside a consistently padded card. Add clear disclosure indicators, wrap long labels and use a single column for detailed readings on narrow screens.
+
 ## 0.1.13
 
 - Retain a pre-step listener's own preparation and completion time when it measures only some internal operations. Subtract the union of measured intervals and downstream work, rather than omitting the whole listener. Preserve return values, error identity and exclusive chart totals. Independently verified with 29 focused regressions and an isolated production-loop Host smoke.

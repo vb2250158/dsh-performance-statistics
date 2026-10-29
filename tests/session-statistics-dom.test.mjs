@@ -163,9 +163,16 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     await React.act(async () => render())
     await React.act(async () => rootLegend('rabiHook').click())
     assert.equal(dialog.querySelectorAll('[data-hook-call]').length, 2)
+    for (const card of dialog.querySelectorAll('[data-hook-call]')) {
+      assert.equal(card.querySelectorAll(':scope > p').length, 0, 'Hook descriptions share the padded card body')
+      assert.equal(card.querySelectorAll(':scope > .dsh-session-statistics-call-body > p').length, 2)
+      assert.ok(card.querySelector('.dsh-session-statistics-call-duration'))
+    }
     assert.match(dialog.querySelector('[data-hook-call="old"]').textContent, /会话开始.*200 毫秒.*处理成功.*HTTP 状态: 200.*内部连接和后台步骤未采集/s)
     assert.match(dialog.querySelector('[data-hook-call="stop"]').textContent, /回复结束.*800 毫秒.*处理结果待核对.*HTTP 状态: 503/s)
     await React.act(async () => dialog.querySelector('[data-hook-call="stop"] button').click())
+    assert.ok(dialog.querySelector('[data-hook-call="stop"] .dsh-session-statistics-call-body .dsh-session-statistics-hook-details'))
+    assert.equal(dialog.querySelector('[data-hook-call="stop"] button').getAttribute('aria-expanded'), 'true')
     assert.match(dialog.querySelector('[data-hook-call="stop"]').textContent, /查询 Host 状态.*100 毫秒.*Rabi 接口请求 \/ 计划完成检查与回传.*700 毫秒/s)
     assert.match(dialog.querySelector('[data-hook-call="stop"]').textContent, /父子步骤可能嵌套/)
     await React.act(async () => dialog.querySelector('[data-pie-level="1"] [data-stage-legend="dsh-rabiroute-agent"]').click())

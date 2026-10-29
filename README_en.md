@@ -1,5 +1,7 @@
 # DSH Performance Statistics
 
+Individual hook cards keep titles, status and descriptions inside a padded container. Expanded readings use separate cells with wrapping labels and a single column on narrow screens, keeping each duration beside its owning step.
+
 [简体中文](README.md) · MIT
 
 An independent performance statistics plugin for DeepSeek Harness. Click the statistics pill below the composer for a timing pie, exact stage readings, individual auxiliary model calls, first-output latency, output speed and token usage. Durations above one second use seconds with up to three decimal places; shorter durations use milliseconds.
