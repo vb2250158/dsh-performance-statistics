@@ -165,11 +165,13 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     assert.equal(dialog.querySelectorAll('[data-hook-call]').length, 2)
     for (const card of dialog.querySelectorAll('[data-hook-call]')) {
       assert.equal(card.querySelectorAll(':scope > p').length, 0, 'Hook descriptions share the padded card body')
-      assert.equal(card.querySelectorAll(':scope > .dsh-session-statistics-call-body > p').length, 2)
+      assert.equal(card.querySelectorAll(':scope > .dsh-session-statistics-call-body > p').length, 3)
       assert.ok(card.querySelector('.dsh-session-statistics-call-duration'))
     }
     assert.match(dialog.querySelector('[data-hook-call="old"]').textContent, /会话开始.*200 毫秒.*处理成功.*HTTP 状态: 200.*内部连接和后台步骤未采集/s)
     assert.match(dialog.querySelector('[data-hook-call="stop"]').textContent, /回复结束.*800 毫秒.*处理结果待核对.*HTTP 状态: 503/s)
+    assert.equal(dialog.querySelector('[data-hook-call="stop"] button').getAttribute('aria-expanded'), 'true', 'Failures expose their readings immediately')
+    await React.act(async () => dialog.querySelector('[data-hook-call="stop"] button').click())
     await React.act(async () => dialog.querySelector('[data-hook-call="stop"] button').click())
     assert.ok(dialog.querySelector('[data-hook-call="stop"] .dsh-session-statistics-call-body .dsh-session-statistics-hook-details'))
     assert.equal(dialog.querySelector('[data-hook-call="stop"] button').getAttribute('aria-expanded'), 'true')
@@ -192,6 +194,40 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     await React.act(async () => document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
     assert.equal(document.querySelector('[role="dialog"]'), null)
     assert.ok(document.activeElement === trigger, 'Escape restores focus to the statistics trigger')
+    stages = { ...stages, phases: {}, work: [], closedMs: 60397, calls: [], operations: [
+      { id: 'legacy-failure', kind: 'rabiHook', hookId: 'failure', operation: 'Stop', operationPath: ['Stop'], startTime: 0, endTime: 60397, turn: 1, step: 0, statusCode: 0, failed: true, outcome: 'failed', uncertain: true },
+      { id: 'endpoint-failure', kind: 'rabiHook', hookId: 'failure', operationPath: ['Stop', 'endpoint-hint'], startTime: 0, endTime: 11885 },
+      { id: 'request-failure', kind: 'rabiHook', hookId: 'failure', operationPath: ['Stop', 'manager-request'], startTime: 11885, endTime: 60395, failed: true },
+    ], liveHooks: [{ handlerId: 'running', turn: 2, point: 'Stop', startedAt: Date.now() - 2000, timeoutMs: 60000,
+      progress: { path: ['manager-request', 'response-headers'], phase: 'started', elapsedMs: 2000 } }] }
+    await React.act(async () => render())
+    await React.act(async () => document.querySelector('[data-composer-stat="activity"]').click())
+    let currentDialog = document.querySelector('[role="dialog"]')
+    assert.match(currentDialog.textContent, /正在执行的 Rabi 钩子.*上限.*60 秒.*正在等待.*响应头/s)
+    const previousElapsed = currentDialog.querySelector('[data-live-elapsed]').textContent
+    await React.act(async () => new Promise(resolve => setTimeout(resolve, 300)))
+    assert.notEqual(currentDialog.querySelector('[data-live-elapsed]').textContent, previousElapsed)
+    const failure = currentDialog.querySelector('[data-hook-call="failure"]')
+    assert.match(failure.textContent, /未收到完整 HTTP 响应/)
+    assert.doesNotMatch(failure.textContent, /HTTP 状态: 0|处理成功|请求超时/)
+    assert.match(failure.textContent, /失败阶段: Rabi 接口请求.*旧记录未采集结束原因/s)
+    assert.match(failure.textContent, /未采集到服务端细分步骤/)
+    assert.match(failure.querySelector('[data-hook-step="endpoint-hint"]').textContent, /11\.885 秒/)
+    assert.match(failure.querySelector('[data-hook-step="manager-request"]').textContent, /48\.51 秒/)
+    stages.liveHooks[0].progress.phase = 'completed'
+    await React.act(async () => render())
+    assert.match(currentDialog.querySelector('[data-live-hook]').textContent, /阶段已完成/)
+    stages.operations[0].diagnostic = { timeoutMs: 60000, reason: 'timeout', stage: ['manager-request', 'response-headers'], requestId: 'fixture-visible-id' }
+    stages.liveHooks = []
+    t = translate('en')
+    await React.act(async () => render())
+    assert.equal(currentDialog.querySelector('[data-live-hook]'), null)
+    assert.match(failure.textContent, /No complete HTTP response received.*Failed stage: Rabi API request \/ Wait for HTTP response headers.*Request timed out.*fixture-visible-id/s)
+    stages.operations[0].diagnostic.reason = 'aborted'
+    await React.act(async () => render())
+    assert.match(failure.textContent, /Request cancelled/)
+    assert.doesNotMatch(failure.textContent, /Request timed out/)
+    await React.act(async () => document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
     stats = { ...stats, turnMs: undefined, otherMs: undefined, compactionMs: undefined, ttftSteps: 0, decodeMs: 0 }
     stages = undefined
     t = translate('en')

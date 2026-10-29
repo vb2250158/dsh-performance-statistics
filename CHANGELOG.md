@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.15
+
+- Show live Rabi hook stages, elapsed waiting and timeout limits in the statistics dialog. Expose failure stages, timeout/cancellation reasons, request IDs and measured stage timelines without adding progress to exclusive chart totals. Retain explicit missing-data labels for old records.
+
+- 在统计弹窗直接显示进行中的 Rabi 钩子阶段、等待时间和超时上限；失败记录展示阶段、超时或取消原因、请求 ID 及已测时间线，进度不重复计入占比，旧记录明确标注未采集信息。
+
 ## 0.1.14
 
 - Keep hook descriptions, status and expanded readings inside a consistently padded card. Add clear disclosure indicators, wrap long labels and use a single column for detailed readings on narrow screens.

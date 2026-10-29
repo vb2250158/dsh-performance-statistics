@@ -1,6 +1,6 @@
 {
   "name": "dsh-performance-statistics",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "Detailed session performance timings and interactive charts for DeepSeek Harness",
   "type": "module",
   "main": "lib/index.js",

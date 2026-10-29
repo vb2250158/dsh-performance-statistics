@@ -22,6 +22,41 @@ const message = (time, first, type = 'text-chunks') => event('assistant/message'
 const fold = events => events.reduce((state, row) => projection.stateSchema.parse(projection.apply(state, row)), projection.init())
 const total = view => Object.values(view.phases).reduce((sum, value) => sum + value, 0)
 
+test('live hook progress is typed, belongs to an invocation and never adds chart duration', () => {
+  let state = fold([event('turn/start', 100), { ...event('plugin:dsh-rabiroute-agent/hook-invoked', 110,
+    { handlerId: 'live', point: 'Stop', timeoutMs: 60000 }), ignorable: true }])
+  const progress = (elapsedMs, extra = {}) => ({ ...event('plugin:dsh-rabiroute-agent/hook-progress', 110 + elapsedMs,
+    { handlerId: 'live', point: 'Stop', path: ['manager-request', 'response-headers'], phase: 'started', elapsedMs, ...extra }), ignorable: true })
+  state = projection.apply(state, progress(10))
+  const wire = projection.wire.viewSchema.parse(projection.wire.view(state))
+  assert.equal(wire.closedMs, 0); assert.deepEqual(wire.phases, {}); assert.deepEqual(wire.operations, [])
+  assert.equal(wire.liveHooks[0].timeoutMs, 60000)
+  assert.deepEqual(wire.liveHooks[0].progress.path, ['manager-request', 'response-headers'])
+  for (const row of [progress(9), progress(11, { handlerId: 'foreign' }), progress(12, { path: ['invalid'] }), progress(NaN),
+    { ...progress(13), ignorable: false }, progress(14, { point: 'SessionStart' })]) assert.equal(projection.apply(state, row), state)
+  state = projection.apply(state, progress(20, { phase: 'completed', durationMs: 10 }))
+  assert.equal(projection.wire.view(state).liveHooks[0].progress.phase, 'completed')
+  state = projection.apply(state, { ...event('plugin:dsh-rabiroute-agent/hook-result', 150, { handlerId: 'live', durationMs: 40, outcome: 'failed', statusCode: 0,
+    diagnostic: { timeoutMs: 60000, reason: 'timeout', stage: ['manager-request', 'response-headers'], requestId: 'fixture-request' } }), ignorable: true })
+  assert.equal(projection.wire.view(state).liveHooks, undefined)
+  state = projection.apply(state, event('turn/end', 160))
+  assert.equal(total(state.view), 60)
+  assert.equal(state.view.operations[0].diagnostic.reason, 'timeout')
+  assert.equal(state.view.operations[0].diagnostic.requestId, 'fixture-request')
+})
+
+test('older HTTP-zero failures retain measured segments without inventing timeout diagnostics', () => {
+  const { view } = fold([event('turn/start', 0), { ...event('plugin:dsh-rabiroute-agent/hook-invoked', 0, { handlerId: 'legacy', point: 'Stop' }), ignorable: true },
+    { ...event('plugin:dsh-rabiroute-agent/hook-result', 60397, { handlerId: 'legacy', durationMs: 60397, outcome: 'failed', statusCode: 0, uncertain: true,
+      diagnostic: { reason: 'probably-timeout', timeoutMs: 60000, stage: [] }, timings: [
+        { path: ['endpoint-hint'], startMs: 0, durationMs: 11885 },
+        { path: ['manager-request'], startMs: 11885, durationMs: 48510, failed: true },
+      ] }), ignorable: true }, event('turn/end', 60397)])
+  assert.equal(view.operations[0].statusCode, 0); assert.equal(view.operations[0].diagnostic, undefined)
+  assert.deepEqual(view.operations.slice(1).map(row => row.endTime - row.startTime), [11885, 48510])
+  assert.equal(total(view), 60397)
+})
+
 test('Hook event, connection and server pies partition one interval and retain old and malformed diagnostic records', () => {
   const invoked = (handlerId, point, time) => ({ ...event('plugin:dsh-rabiroute-agent/hook-invoked', time, { handlerId, point }), ignorable: true })
   const result = (handlerId, durationMs, time, timings) => ({ ...event('plugin:dsh-rabiroute-agent/hook-result', time,
@@ -242,4 +277,15 @@ test('sweep stays proportional to spans rather than elapsed milliseconds', t => 
   t.diagnostic(`10001 intervals: ${(performance.now() - start).toFixed(1)} ms`)
   assert.equal(result.toolExecute, 500000)
   assert.equal(Object.values(result).reduce((sum, value) => sum + value, 0), 86400000)
+})
+
+test('verified remote Hook progress includes metadata stages without counting them twice', () => {
+  const start = { ...event('plugin:dsh-rabiroute-agent/hook-invoked', 10, { handlerId: 'remote', point: 'Stop', turn: 1, timeoutMs: 60000 }), ignorable: true }
+  let state = fold([event('turn/start', 0, { turn: 1 }), start])
+  for (const root of ['manager-meta-before', 'manager-meta-after']) for (const path of [[root], [root, 'response-headers'], [root, 'response-body']]) {
+    state = projection.apply(state, { ...event('plugin:dsh-rabiroute-agent/hook-progress', 20, { handlerId: 'remote', point: 'Stop', turn: 1, path, phase: 'started', elapsedMs: 10 }), ignorable: true })
+    assert.deepEqual(projection.wire.view(state).liveHooks[0].progress.path, path)
+    assert.equal(state.view.closedMs, 0)
+    assert.equal(state.open.spans.length, 0)
+  }
 })
