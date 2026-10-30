@@ -13,7 +13,8 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
   const dom = new JSDOM('<!doctype html><div id="app"></div>', { url: 'http://localhost/' })
   dom.window.HTMLElement.prototype.scrollIntoView = function () {}
   const globals = { window: dom.window, document: dom.window.document, navigator: dom.window.navigator,
-    HTMLElement: dom.window.HTMLElement, Node: dom.window.Node, getComputedStyle: dom.window.getComputedStyle, IS_REACT_ACT_ENVIRONMENT: true }
+    requestAnimationFrame: callback => setTimeout(callback, 16), cancelAnimationFrame: clearTimeout,
+    Element: dom.window.Element, HTMLElement: dom.window.HTMLElement, Node: dom.window.Node, getComputedStyle: dom.window.getComputedStyle, IS_REACT_ACT_ENVIRONMENT: true }
   const previous = Object.fromEntries(Object.keys(globals).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]))
   for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { value, configurable: true, writable: true })
   const hooks = registerHooks({
@@ -76,9 +77,19 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     trigger.focus()
     await React.act(async () => trigger.click())
 
+    stages.rounds = [{ turn: 0, closedMs: 17800, steps: 1, firstOutputMs: 17700, firstOutputTurns: 1, phases: stages.phases }]
+    await React.act(async () => render())
+    await React.act(async () => document.querySelector('[aria-label="统计范围: 全会话"]').click())
+    await React.act(async () => [...document.querySelectorAll('[role="menuitem"]')].find(row => row.textContent.includes('第 1 轮')).click())
+    assert.match(document.querySelector('.dsh-session-statistics-session-counts').textContent, /第 1 轮/)
+    assert.equal(document.querySelector('.dsh-session-statistics-token-grid'), null)
+    await React.act(async () => document.querySelector('[aria-label="统计范围: 第 1 轮"]').click())
+    await React.act(async () => [...document.querySelectorAll('[role="menuitem"]')].find(row => row.textContent === '全会话').click())
+
     const dialog = document.querySelector('[role="dialog"]')
     assert.equal(dialog.querySelector('.dsh-session-statistics-session-title').textContent, '问候')
-    assert.equal(dialog.querySelector('.dsh-session-statistics-session-counts').textContent, '全会话 · 已结束轮次 · 1 轮 · 1 步')
+    assert.equal(dialog.querySelector('.dsh-session-statistics-session-counts').textContent, '全会话 · 1 轮 · 1 步')
+    assert.match(dialog.querySelector('.dsh-session-statistics-summary').textContent, /总.*模型耗时.*工具耗时/s)
     sessionTitle = '更新后的会话标题'.repeat(20)
     await React.act(async () => render())
     assert.equal(dialog.querySelector('.dsh-session-statistics-session-title').textContent, sessionTitle)

@@ -1,10 +1,12 @@
 import * as React from 'react'
-import { Modal, Pill, Button, IconGaugeOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Modal, Pill, Button, Menu, IconGaugeOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { sessionBreakdown } from './session-breakdown.js'
-import { sessionStatisticsReading } from './session-statistics.js'
+import { sessionStatisticsReading, sessionStatisticsScope } from './session-statistics.js'
 
 export const sessionStatisticsLocales = {
   zh: {
+    filter: '统计范围', allRounds: '全会话', round: '第 {value} 轮', modelOverview: '模型耗时', toolOverview: '工具耗时',
+    overviewScope: '模型含主模型与辅助模型；工具含派发、执行和结果处理。按饼图独占时间统计。', roundSpeedMissing: '本轮未采集独立输出速度及 Token 用量。',
     hookCalls: '逐次 Rabi 钩子', hookHttp: 'HTTP 状态', hookUncertain: '处理结果待核对', hookBlocked: '已阻止', hookContinued: '要求继续处理', hookSucceeded: '处理成功', hookFailed: '处理失败',
     hookLegacy: '本次仅记录钩子总耗时，内部连接和后台步骤未采集。', hookMeasured: '内部步骤已采集，可继续点选上方图例查看。',
     hookMore: '继续显示钩子（已显示 {shown} / {total}）',
@@ -33,7 +35,7 @@ export const sessionStatisticsLocales = {
     missingStageAttribution: '这段 {value} 尚未记录处理插件或子步骤名称，无法事后补算；不把外层阶段当成已细分的数据。',
     noStageOperations: '本阶段没有已记录的内部操作。', enclosingStage: '阶段总计',
     stageCoverage: '下方仅列出已采集的操作，不代表完整的插件执行清单。',
-    scope: '全会话 · 已结束轮次', total: '轮次累计耗时', ttft: '模型步骤首 token', responseWait: '首个模型输出等待', speed: '输出速度',
+    scope: '全会话 · 已结束轮次', total: '总耗时', ttft: '模型步骤首 token', responseWait: '首个模型输出等待', speed: '输出速度',
     seconds: '{value} 秒', milliseconds: '{value} 毫秒', tps: '{value} tok/s', numberLocale: 'zh-CN',
     model: '模型', tools: '工具调用', compaction: '上下文压缩', unrecorded: '阶段明细未记录',
     pie: '各阶段耗时占比', phases: '环节明细', operations: '模型、工具与钩子明细', calls: '次数', failed: '失败', clear: '查看全部环节',
@@ -58,6 +60,8 @@ export const sessionStatisticsLocales = {
     succeeded: '流正常结束', interrupted: '失败或中断', unlabelled: '调用方未标注用途', unavailableCaller: '调用方未标注插件', contextStage: '所在环节',
   },
   en: {
+    filter: 'Statistics range', allRounds: 'Whole session', round: 'Turn {value}', modelOverview: 'Model time', toolOverview: 'Tool time',
+    overviewScope: 'Model includes main and auxiliary models; tools include dispatch, execution and results. Uses exclusive chart time.', roundSpeedMissing: 'Separate output speed and token usage were not recorded for this turn.',
     hookCalls: 'Individual Rabi hooks', hookHttp: 'HTTP status', hookUncertain: 'Outcome needs reconciliation', hookBlocked: 'Blocked', hookContinued: 'Continuation requested', hookSucceeded: 'Succeeded', hookFailed: 'Failed',
     hookLegacy: 'Only total hook time was recorded. Connection and server steps were not captured.',
     hookMeasured: 'Internal steps were captured. Select the chart legends above to inspect them.',
@@ -87,7 +91,7 @@ export const sessionStatisticsLocales = {
     missingStageAttribution: 'No processing plugin or substep name was recorded for this {value}; those details cannot be recovered from the enclosing stage.',
     noStageOperations: 'No internal operations were recorded for this stage.', enclosingStage: 'Enclosing stage total',
     stageCoverage: 'Only recorded operations are listed; this is not a complete list of executed plugins.',
-    scope: 'Whole session · closed turns', total: 'Cumulative turn time', ttft: 'Model-step first token', responseWait: 'Wait for first model output', speed: 'Output speed',
+    scope: 'Whole session · closed turns', total: 'Total time', ttft: 'Model-step first token', responseWait: 'Wait for first model output', speed: 'Output speed',
     seconds: '{value} s', milliseconds: '{value} ms', tps: '{value} tok/s', numberLocale: 'en-US',
     model: 'Model', tools: 'Tool calls', compaction: 'Context compaction', unrecorded: 'Stage details unrecorded',
     pie: 'Time by stage', phases: 'Stage readings', operations: 'Model, tool and hook operations', calls: 'Calls', failed: 'Failed', clear: 'Show all stages',
@@ -215,7 +219,7 @@ export const sessionStatisticsCss = `
 .dsh-session-statistics-candidate-name{min-width:0;flex:1 1 180px;overflow-wrap:anywhere}
 .dsh-session-statistics-candidate-result{margin-left:auto;white-space:nowrap;font-variant-numeric:tabular-nums}
 .dsh-session-statistics-body{display:grid;gap:24px;min-width:0;color:var(--dsw-alias-label-primary)}
-.dsh-session-statistics-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.dsh-session-statistics-summary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}.dsh-session-statistics-summary>div{grid-column:span 2}.dsh-session-statistics-summary>div:nth-child(n+4){grid-column:span 3}
 .dsh-session-statistics-summary>div{display:grid;gap:8px;padding:16px;border:1px solid var(--dsw-alias-border-l2);border-radius:12px;min-width:0}
 .dsh-session-statistics-summary dt,.dsh-session-statistics-note{font-size:12px;color:var(--dsw-alias-label-secondary);line-height:1.6;margin:0}
 .dsh-session-statistics-summary dd{font-size:24px;font-weight:600;line-height:1.3;margin:0;overflow-wrap:anywhere}
@@ -459,9 +463,12 @@ function StatisticsDetails({ stats, usage, stages, t }) {
   return h('div', { className: 'dsh-session-statistics-body' },
     h('dl', { className: 'dsh-session-statistics-summary' }, ...[
       ['total', statisticsDuration(stats.turnMs, t)],
+      ['modelOverview', statisticsDuration(reading.modelMs, t)],
+      ['toolOverview', statisticsDuration(reading.toolMs, t)],
       [reading.responseWait === undefined ? 'ttft' : 'responseWait', statisticsDuration(reading.responseWait ?? reading.averageTtft, t)],
       ['speed', reading.speed === undefined ? t('missing') : t('tps', { value: statisticsNumber(reading.speed, t) })],
     ].map(([key, value]) => h('div', { key }, h('dt', null, t(key)), h('dd', null, value)))),
+    h('p', { className: 'dsh-session-statistics-note' }, t('overviewScope')),
     h('section', { className: 'dsh-session-statistics-section' }, h('h3', null, t('pie')),
       h('p', { className: 'dsh-session-statistics-note' }, t('childrenHint')),
       reading.phases.length > 0 ? h(StatisticsPie, { phases: reading.phases, total: stages.closedMs, selected: path[0], select: key => choose(0, key), t })
@@ -489,6 +496,10 @@ export function SessionStatisticsPill({ useProjection, t }) {
   const usage = useProjection('tokenUsage')
   const stages = useProjection('chatSessionTiming')
   const [open, setOpen] = React.useState(false)
+  const [turn, setTurn] = React.useState(null), [filterOpen, setFilterOpen] = React.useState(false)
+  const effectiveTurn = stages?.rounds?.some(row => row.turn === turn) ? turn : null
+  const scoped = sessionStatisticsScope(stats, stages, effectiveTurn)
+  const rangeLabel = effectiveTurn === null ? t('allRounds') : t('round', { value: stages.rounds.findIndex(row => row.turn === effectiveTurn) + 1 })
   const counts = stats === undefined ? t('title') : t('counts', { turns: stats.turns, steps: stats.steps })
   const label = stats?.turnMs === undefined ? counts : `${counts} · ${statisticsDuration(stats.turnMs, t)}`
   return React.createElement(React.Fragment, null,
@@ -499,9 +510,15 @@ export function SessionStatisticsPill({ useProjection, t }) {
       className: 'dsh-session-statistics', contentClassName: 'dsh-session-statistics-content' },
     open && React.createElement('div', { className: 'dsh-session-statistics-session-row' },
       React.createElement('span', { className: 'dsh-session-statistics-session-title' }, sessionTitle),
-      React.createElement('span', { className: 'dsh-session-statistics-session-counts' }, `${t('scope')} · ${counts}`)),
+      React.createElement(Menu, { open: filterOpen, onClose: () => setFilterOpen(false), portal: true, align: 'end', autoFocus: true,
+        selectedId: effectiveTurn === null ? 'all' : String(effectiveTurn),
+        items: [{ id: 'all', label: t('allRounds') }, ...(stages?.rounds ?? []).map((row, index) => ({ id: String(row.turn), label: t('round', { value: index + 1 }) }))],
+        onSelect: id => { setTurn(id === 'all' ? null : Number(id)); setFilterOpen(false) },
+        anchor: React.createElement(Button, { onClick: () => setFilterOpen(value => !value), 'aria-label': `${t('filter')}: ${rangeLabel}`, 'aria-haspopup': 'menu', 'aria-expanded': filterOpen }, rangeLabel, ' ▾') })),
+    open && React.createElement('p', { className: 'dsh-session-statistics-note dsh-session-statistics-session-counts' }, `${rangeLabel} · ${t('counts', { turns: scoped.stats?.turns ?? 0, steps: scoped.stats?.steps ?? 0 })}`),
     open && stages?.liveHooks?.length > 0 && React.createElement(LiveHooks, { hooks: stages.liveHooks, t }),
-    open && React.createElement(StatisticsDetails, { stats, usage, stages, t })))
+    open && React.createElement(StatisticsDetails, { key: effectiveTurn ?? 'all', stats: scoped.stats, usage: effectiveTurn === null ? usage : undefined, stages: scoped.stages, t }),
+    open && effectiveTurn !== null && React.createElement('p', { className: 'dsh-session-statistics-note' }, t('roundSpeedMissing'))))
 }
 
 /** Install a reversible, theme-aware replacement through the public composer slot. */

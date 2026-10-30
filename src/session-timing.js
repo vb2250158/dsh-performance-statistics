@@ -181,6 +181,7 @@ export function createSessionTimingProjection(z, runFirstTokenTime) {
   const liveHookSchema = z.object({ handlerId: z.string(), turn: time, point: z.string(), startedAt: time, timeoutMs: time.optional(), progress: progressSchema.optional() })
   const viewSchema = z.object({ closedMs: time, turns: time, firstOutputMs: time, firstOutputTurns: time, phases: z.record(z.string(), time),
     liveHooks: z.array(liveHookSchema).optional(),
+    rounds: z.array(z.object({ turn: time, closedMs: time, steps: time, firstOutputMs: time, firstOutputTurns: time, phases: z.record(z.string(), time) })),
     details: z.array(detailSchema), calls: z.array(recordSchema), operations: z.array(recordSchema), work: z.array(workSchema), selections: z.array(selectionSchema), measuredSpans: time, incompleteSpans: time })
   const hookStart = z.object({ handlerId: z.string(), point: z.string(), turn: z.number(), timeoutMs: time.optional() })
   const hookEnd = z.object({ handlerId: z.string(), turn: z.number(), durationMs: time, outcome: z.string() })
@@ -191,16 +192,16 @@ export function createSessionTimingProjection(z, runFirstTokenTime) {
     spans: z.array(spanSchema), details: z.record(z.string(), detailSchema), calls: z.array(recordSchema), operations: z.array(recordSchema), measuredSpans: time,
     tools: z.record(z.string(), z.object({ start: time, name: z.string() })),
     compactions: z.record(z.string(), time), hooks: z.record(z.string(), z.object({ start: time, point: z.string(), timeoutMs: time.optional(), progress: progressSchema.optional(), parentKind: z.string().optional() })),
-    pending: z.record(z.string(), recordSchema), selections: z.array(selectionSchema),
+    pending: z.record(z.string(), recordSchema), selections: z.array(selectionSchema), steps: time,
   })
   return {
-    key: 'chatSessionTiming', stateVersion: 8,
+    key: 'chatSessionTiming', stateVersion: 9,
     stateSchema: z.object({ view: viewSchema, open: openSchema.nullable(), details: z.record(z.string(), detailSchema) }),
-    init: () => ({ view: { closedMs: 0, turns: 0, firstOutputMs: 0, firstOutputTurns: 0, phases: {}, details: [], calls: [], operations: [], work: [], selections: [], measuredSpans: 0, incompleteSpans: 0 }, open: null, details: {} }),
+    init: () => ({ view: { rounds: [], closedMs: 0, turns: 0, firstOutputMs: 0, firstOutputTurns: 0, phases: {}, details: [], calls: [], operations: [], work: [], selections: [], measuredSpans: 0, incompleteSpans: 0 }, open: null, details: {} }),
     apply(state, event) {
       if (event.type === 'turn/start') return { ...state, open: { turn: event.data.turn, start: event.time,
         phase: 'turnPrepare', cursor: event.time, step: null, firstOutputAt: null, spans: [], details: {}, calls: [], operations: [], measuredSpans: 0,
-        tools: {}, compactions: {}, hooks: {}, pending: {}, selections: [] } }
+        tools: {}, compactions: {}, hooks: {}, pending: {}, selections: [], steps: 0 } }
       let open = state.open
       if (open === null) return state
       if (event.data?.turn !== undefined && event.data.turn !== open.turn) return state
@@ -237,7 +238,7 @@ export function createSessionTimingProjection(z, runFirstTokenTime) {
           if (Object.keys(tools).length === 0) open = move(open, 'resultCommit', event.time)
           break
         }
-        case 'step/end': open = { ...move(open, 'stepTransition', event.time), step: null }; break
+        case 'step/end': open = { ...move(open, 'stepTransition', event.time), step: null, steps: open.steps + 1 }; break
         case 'compaction/start': open = { ...open, compactions: { ...open.compactions, [event.data.compactionId]: event.time } }; break
         case 'compaction/end': {
           const id = event.data.compactionId, start = Object.hasOwn(open.compactions, id) ? open.compactions[id] : undefined
@@ -346,6 +347,8 @@ export function createSessionTimingProjection(z, runFirstTokenTime) {
             firstOutputTurns: state.view.firstOutputTurns + Number(open.firstOutputAt !== null),
             turns: state.view.turns + 1, phases, details: Object.values(details).sort((a, b) => b.milliseconds - a.milliseconds), calls: [...state.view.calls, ...open.calls],
             operations: [...state.view.operations, ...open.operations],
+            rounds: [...state.view.rounds, { turn: open.turn, closedMs: Math.max(0, event.time - open.start), steps: open.steps,
+              firstOutputMs: open.firstOutputAt === null ? 0 : Math.max(0, open.firstOutputAt - open.start), firstOutputTurns: Number(open.firstOutputAt !== null), phases: exclusive.phases }],
             work: [...state.view.work, ...work], selections: [...state.view.selections, ...open.selections],
             measuredSpans: state.view.measuredSpans + open.measuredSpans,
             incompleteSpans: state.view.incompleteSpans + Object.values(open.pending).filter(row => row.kind !== 'turnStopping').length } }

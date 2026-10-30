@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.16
+
+- Add a whole-session / completed-turn dropdown, synchronized drilldowns and prominent total, model and tool timing cards. Projection v9 replays turn boundaries without rewriting session logs. Model/tool overviews use exclusive chart time. Per-turn speed and token totals remain unavailable when not recorded.
+
 ## 0.1.15
 
 - Show live Rabi hook stages, elapsed waiting and timeout limits in the statistics dialog. Expose failure stages, timeout/cancellation reasons, request IDs and measured stage timelines without adding progress to exclusive chart totals. Retain explicit missing-data labels for old records.

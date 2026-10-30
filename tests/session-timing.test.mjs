@@ -22,6 +22,17 @@ const message = (time, first, type = 'text-chunks') => event('assistant/message'
 const fold = events => events.reduce((state, row) => projection.stateSchema.parse(projection.apply(state, row)), projection.init())
 const total = view => Object.values(view.phases).reduce((sum, value) => sum + value, 0)
 
+test('replay retains independent completed turn totals, phases and step counts across checkpoints', () => {
+  const rows = [event('turn/start', 100), event('step/start', 110), message(150, 120), event('step/end', 160), event('turn/end', 200),
+    event('turn/start', 300, { turn: 1 }), event('step/start', 310, { turn: 1 }), event('step/end', 340, { turn: 1 }), event('turn/end', 350, { turn: 1 })]
+  const state = fold(rows), rounds = state.view.rounds
+  assert.deepEqual(rounds.map(r => [r.turn, r.closedMs, r.steps]), [[0, 100, 1], [1, 50, 1]])
+  assert.equal(rounds.reduce((sum, r) => sum + r.closedMs, 0), state.view.closedMs)
+  for (const r of rounds) assert.equal(total(r), r.closedMs)
+  const checkpoint = projection.stateSchema.parse(JSON.parse(JSON.stringify(fold(rows.slice(0, 5)))))
+  assert.deepEqual(rows.slice(5).reduce((s, e) => projection.apply(s, e), checkpoint).view.rounds, rounds)
+})
+
 test('live hook progress is typed, belongs to an invocation and never adds chart duration', () => {
   let state = fold([event('turn/start', 100), { ...event('plugin:dsh-rabiroute-agent/hook-invoked', 110,
     { handlerId: 'live', point: 'Stop', timeoutMs: 60000 }), ignorable: true }])
