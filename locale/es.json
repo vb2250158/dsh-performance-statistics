@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Estadísticas de rendimiento",
+    "description": "Gráficos de tiempo por etapa y detalles de llamadas a modelos, herramientas y hooks."
+  }
+}
