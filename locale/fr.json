@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Statistiques de performance",
+    "description": "Graphiques des durées par étape et détails des appels de modèles, d’outils et de hooks."
+  }
+}

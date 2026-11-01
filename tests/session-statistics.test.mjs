@@ -1,6 +1,18 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { sessionStatisticsReading } from '../src/session-statistics.js'
+import { sessionStatisticsReading, sessionStatisticsScope } from '../src/session-statistics.js'
+
+test('turn selection filters every drilldown carrier and uses exclusive model and tool totals', () => {
+  const stages = { rounds: [{ turn: 4, closedMs: 100, steps: 2, phases: { modelWait: 20, auxiliaryModel: 10, toolExecute: 30, preStep: 40 } }],
+    calls: [{ turn: 3 }, { turn: 4 }], operations: [{ turn: 3 }, { turn: 4 }], work: [{ turn: 3 }, { turn: 4 }], selections: [{ turn: 3 }, { turn: 4 }] }
+  const selected = sessionStatisticsScope({}, stages, 4)
+  assert.equal(selected.stats.turnMs, 100)
+  for (const key of ['calls', 'operations', 'work', 'selections']) assert.deepEqual(selected.stages[key], [{ turn: 4 }])
+  const reading = sessionStatisticsReading(selected.stats, selected.stages)
+  assert.equal(reading.modelMs, 30); assert.equal(reading.toolMs, 30)
+  assert.equal(sessionStatisticsScope({}, stages, null).stages, stages)
+  assert.equal(sessionStatisticsScope({}, stages, 99).stats, undefined)
+})
 
 test('reads host measurements without inventing a partition for overlapping activities', () => {
   const result = sessionStatisticsReading({ turnMs: 1000, llmMs: 700, toolMs: 1500, otherMs: 100,

@@ -3,6 +3,11 @@ export const SESSION_TIMING_RECORD = 'plugin:dsh-performance-statistics/timing'
 /** Read historical records without rewriting stored Sessions. */
 export const LEGACY_SESSION_TIMING_RECORD = 'plugin:dsh-chat-enhancement/timing'
 
+function hookDiagnosticSchema(z) {
+  return z.object({ timeoutMs: z.number().finite().positive(), reason: z.enum(['timeout', 'aborted', 'request_failed', 'manager_rejected', 'completed']),
+    stage: z.array(z.string().regex(/^[a-z][a-z0-9-]{0,79}$/u)).min(1).max(6), requestId: z.string().min(1).max(200).optional() })
+}
+
 export const SESSION_TIMING_KINDS = [
   'turnPrepare', 'modelSelection', 'preStep', 'requestPrepare', 'contextCheck', 'contextReady',
   'modelWait', 'modelCall', 'modelReasoning', 'modelOutput', 'modelToolPlan', 'streamFinalize', 'auxiliaryModel',
@@ -30,6 +35,7 @@ export function sessionTimingRecordSchema(z) {
     operationPath: z.array(z.string()).optional(), hookId: z.string().optional(),
     statusCode: z.number().int().nonnegative().optional(), outcome: z.string().optional(), uncertain: z.boolean().optional(),
     transport: z.enum(['native-decisions']).optional(), selectionId: z.string().optional(),
+    diagnostic: hookDiagnosticSchema(z).optional(),
   }).refine(value => value.phase !== 'end' || (value.endTime !== undefined && value.endTime >= value.startTime))
 }
 
@@ -168,9 +174,16 @@ export function createSessionTimingProjection(z, runFirstTokenTime) {
       plugin: z.string().optional(), operation: z.string().optional(), detail: z.string().optional(),
       operationPath: z.array(z.string()).optional(), hookId: z.string().optional(),
       provider: z.string().optional(), model: z.string().optional(), turn: time, step: time })
+  const progressPath = z.union([z.tuple([z.enum(['endpoint-hint', 'host-discovery', 'manager-request', 'manager-meta-before', 'manager-meta-after'])]),
+    z.tuple([z.enum(['manager-request', 'manager-meta-before', 'manager-meta-after']), z.enum(['response-headers', 'response-body'])])])
+  const progressSchema = z.object({ handlerId: z.string(), turn: time, point: z.string(), path: progressPath,
+    phase: z.enum(['started', 'completed', 'failed']), elapsedMs: time, durationMs: time.optional() })
+  const liveHookSchema = z.object({ handlerId: z.string(), turn: time, point: z.string(), startedAt: time, timeoutMs: time.optional(), progress: progressSchema.optional() })
   const viewSchema = z.object({ closedMs: time, turns: time, firstOutputMs: time, firstOutputTurns: time, phases: z.record(z.string(), time),
+    liveHooks: z.array(liveHookSchema).optional(),
+    rounds: z.array(z.object({ turn: time, closedMs: time, steps: time, firstOutputMs: time, firstOutputTurns: time, phases: z.record(z.string(), time) })),
     details: z.array(detailSchema), calls: z.array(recordSchema), operations: z.array(recordSchema), work: z.array(workSchema), selections: z.array(selectionSchema), measuredSpans: time, incompleteSpans: time })
-  const hookStart = z.object({ handlerId: z.string(), point: z.string(), turn: z.number() })
+  const hookStart = z.object({ handlerId: z.string(), point: z.string(), turn: z.number(), timeoutMs: time.optional() })
   const hookEnd = z.object({ handlerId: z.string(), turn: z.number(), durationMs: time, outcome: z.string() })
   const hookTiming = z.object({ path: z.array(z.string().regex(/^[a-z][a-z0-9-]{0,79}$/u)).min(1).max(6),
     startMs: time, durationMs: time, failed: z.boolean().optional() })
@@ -178,17 +191,17 @@ export function createSessionTimingProjection(z, runFirstTokenTime) {
     step: z.object({ number: time, start: time, contextAt: time.optional(), dispatchAt: time.optional() }).nullable(), firstOutputAt: time.nullable(),
     spans: z.array(spanSchema), details: z.record(z.string(), detailSchema), calls: z.array(recordSchema), operations: z.array(recordSchema), measuredSpans: time,
     tools: z.record(z.string(), z.object({ start: time, name: z.string() })),
-    compactions: z.record(z.string(), time), hooks: z.record(z.string(), z.object({ start: time, point: z.string(), parentKind: z.string().optional() })),
-    pending: z.record(z.string(), recordSchema), selections: z.array(selectionSchema),
+    compactions: z.record(z.string(), time), hooks: z.record(z.string(), z.object({ start: time, point: z.string(), timeoutMs: time.optional(), progress: progressSchema.optional(), parentKind: z.string().optional() })),
+    pending: z.record(z.string(), recordSchema), selections: z.array(selectionSchema), steps: time,
   })
   return {
-    key: 'chatSessionTiming', stateVersion: 7,
+    key: 'chatSessionTiming', stateVersion: 9,
     stateSchema: z.object({ view: viewSchema, open: openSchema.nullable(), details: z.record(z.string(), detailSchema) }),
-    init: () => ({ view: { closedMs: 0, turns: 0, firstOutputMs: 0, firstOutputTurns: 0, phases: {}, details: [], calls: [], operations: [], work: [], selections: [], measuredSpans: 0, incompleteSpans: 0 }, open: null, details: {} }),
+    init: () => ({ view: { rounds: [], closedMs: 0, turns: 0, firstOutputMs: 0, firstOutputTurns: 0, phases: {}, details: [], calls: [], operations: [], work: [], selections: [], measuredSpans: 0, incompleteSpans: 0 }, open: null, details: {} }),
     apply(state, event) {
       if (event.type === 'turn/start') return { ...state, open: { turn: event.data.turn, start: event.time,
         phase: 'turnPrepare', cursor: event.time, step: null, firstOutputAt: null, spans: [], details: {}, calls: [], operations: [], measuredSpans: 0,
-        tools: {}, compactions: {}, hooks: {}, pending: {}, selections: [] } }
+        tools: {}, compactions: {}, hooks: {}, pending: {}, selections: [], steps: 0 } }
       let open = state.open
       if (open === null) return state
       if (event.data?.turn !== undefined && event.data.turn !== open.turn) return state
@@ -225,7 +238,7 @@ export function createSessionTimingProjection(z, runFirstTokenTime) {
           if (Object.keys(tools).length === 0) open = move(open, 'resultCommit', event.time)
           break
         }
-        case 'step/end': open = { ...move(open, 'stepTransition', event.time), step: null }; break
+        case 'step/end': open = { ...move(open, 'stepTransition', event.time), step: null, steps: open.steps + 1 }; break
         case 'compaction/start': open = { ...open, compactions: { ...open.compactions, [event.data.compactionId]: event.time } }; break
         case 'compaction/end': {
           const id = event.data.compactionId, start = Object.hasOwn(open.compactions, id) ? open.compactions[id] : undefined
@@ -267,7 +280,16 @@ export function createSessionTimingProjection(z, runFirstTokenTime) {
           const enclosing = Object.values(open.pending).filter(value => value.startTime <= event.time && value.role === undefined)
             .sort((a, b) => b.startTime - a.startTime)[0]
           open = { ...open, hooks: { ...open.hooks, [row.handlerId]: { start: event.time, point: row.point,
+            ...(row.timeoutMs === undefined ? {} : { timeoutMs: row.timeoutMs }),
             ...(enclosing === undefined ? {} : { parentKind: enclosing.kind }) } } }
+          break
+        }
+        case 'plugin:dsh-rabiroute-agent/hook-progress': {
+          const parsed = progressSchema.safeParse(event.data)
+          if (!parsed.success || event.ignorable !== true) return state
+          const row = parsed.data, invoked = Object.hasOwn(open.hooks, row.handlerId) ? open.hooks[row.handlerId] : undefined
+          if (!invoked || invoked.point !== row.point || row.elapsedMs < (invoked.progress?.elapsedMs ?? 0)) return state
+          open = { ...open, hooks: { ...open.hooks, [row.handlerId]: { ...invoked, progress: row } } }
           break
         }
         case 'plugin:dsh-rabiroute-agent/hook-result': {
@@ -277,12 +299,14 @@ export function createSessionTimingProjection(z, runFirstTokenTime) {
           if (invoked === undefined || row.turn !== open.turn) return state
           const hooks = { ...open.hooks }; delete hooks[row.handlerId]
           const id = `rabi-${row.handlerId}-${invoked.start}`
+          const diagnostic = hookDiagnosticSchema(z).safeParse(event.data.diagnostic)
           open = detail({ ...addSpan(open, 'rabiHook', invoked.start, event.time, `rabi-${row.handlerId}-${invoked.start}`), hooks }, 'rabiHook', invoked.point,
             row.durationMs, row.outcome === 'failed')
           open = { ...open, operations: [...open.operations, { id, phase: 'end', kind: 'rabiHook',
             turn: open.turn, step: open.step?.number ?? 0, startTime: invoked.start, endTime: event.time, detail: invoked.point,
             plugin: 'dsh-rabiroute-agent', operation: invoked.point, failed: row.outcome === 'failed',
             operationPath: [invoked.point], hookId: row.handlerId, outcome: row.outcome,
+            ...(diagnostic.success ? { diagnostic: diagnostic.data } : {}),
             ...(Number.isInteger(event.data.statusCode) && event.data.statusCode >= 0 ? { statusCode: event.data.statusCode } : {}),
             ...(typeof event.data.uncertain === 'boolean' ? { uncertain: event.data.uncertain } : {}),
             ...(invoked.parentKind === undefined ? {} : { parentKind: invoked.parentKind }) }] }
@@ -323,6 +347,8 @@ export function createSessionTimingProjection(z, runFirstTokenTime) {
             firstOutputTurns: state.view.firstOutputTurns + Number(open.firstOutputAt !== null),
             turns: state.view.turns + 1, phases, details: Object.values(details).sort((a, b) => b.milliseconds - a.milliseconds), calls: [...state.view.calls, ...open.calls],
             operations: [...state.view.operations, ...open.operations],
+            rounds: [...state.view.rounds, { turn: open.turn, closedMs: Math.max(0, event.time - open.start), steps: open.steps,
+              firstOutputMs: open.firstOutputAt === null ? 0 : Math.max(0, open.firstOutputAt - open.start), firstOutputTurns: Number(open.firstOutputAt !== null), phases: exclusive.phases }],
             work: [...state.view.work, ...work], selections: [...state.view.selections, ...open.selections],
             measuredSpans: state.view.measuredSpans + open.measuredSpans,
             incompleteSpans: state.view.incompleteSpans + Object.values(open.pending).filter(row => row.kind !== 'turnStopping').length } }
@@ -331,6 +357,9 @@ export function createSessionTimingProjection(z, runFirstTokenTime) {
       }
       return { ...state, open }
     },
-    wire: { summary: false, viewSchema, view: state => state.view },
+    wire: { summary: false, viewSchema, view: state => Object.keys(state.open?.hooks ?? {}).length === 0 ? state.view : ({ ...state.view, liveHooks: Object.entries(state.open.hooks).map(([handlerId, hook]) => ({
+      handlerId, turn: state.open.turn, point: hook.point, startedAt: hook.start,
+      ...(hook.timeoutMs === undefined ? {} : { timeoutMs: hook.timeoutMs }), ...(hook.progress === undefined ? {} : { progress: hook.progress }),
+    })) }) },
   }
 }
