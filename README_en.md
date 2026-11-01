@@ -4,6 +4,8 @@
 
 An independent performance statistics plugin for DeepSeek Harness. Click the statistics pill below the composer for a timing pie, exact stage readings, individual auxiliary model calls, first-output latency, output speed and token usage. Durations above one second use seconds with up to three decimal places; shorter durations use milliseconds.
 
+The statistics dialog shows the session name and ID, with a two-column legend on wide screens and a responsive layout on narrow screens.
+
 ## Install and migrate
 
 Targets the public DSH 0.2.1 plugin APIs; verified with 0.2.1-rc.3. Install this repository through the DSH plugin manager or supported CLI:

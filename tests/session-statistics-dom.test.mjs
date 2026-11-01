@@ -66,7 +66,7 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     ]
     let t = translate('zh')
     let sessionTitle = '问候'
-    const render = () => root.render(React.createElement(activity.component, { useProjection: name =>
+    const render = () => root.render(React.createElement(activity.component, { sessionId: 'session-fixture-123', useProjection: name =>
       name === 'title' ? sessionTitle : name === 'sessionStats' ? stats : name === 'chatSessionTiming' ? stages : name === 'tokenUsage' ? usage : undefined, t }))
     await React.act(async () => render())
 
@@ -78,6 +78,7 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
 
     const dialog = document.querySelector('[role="dialog"]')
     assert.equal(dialog.querySelector('.dsh-session-statistics-session-title').textContent, '问候')
+    assert.equal(dialog.querySelector('.dsh-session-statistics-session-id').textContent, '会话 ID: session-fixture-123')
     assert.equal(dialog.querySelector('.dsh-session-statistics-session-counts').textContent, '全会话 · 已结束轮次 · 1 轮 · 1 步')
     sessionTitle = '更新后的会话标题'.repeat(20)
     await React.act(async () => render())
