@@ -12,6 +12,8 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
   const React = require('react'), { JSDOM } = require('jsdom')
   const dom = new JSDOM('<!doctype html><div id="app"></div>', { url: 'http://localhost/' })
   dom.window.HTMLElement.prototype.scrollIntoView = function () {}
+  dom.window.requestAnimationFrame = callback => setTimeout(callback, 16)
+  dom.window.cancelAnimationFrame = clearTimeout
   const globals = { window: dom.window, document: dom.window.document, navigator: dom.window.navigator,
     requestAnimationFrame: callback => setTimeout(callback, 16), cancelAnimationFrame: clearTimeout,
     Element: dom.window.Element, HTMLElement: dom.window.HTMLElement, Node: dom.window.Node, getComputedStyle: dom.window.getComputedStyle, IS_REACT_ACT_ENVIRONMENT: true }
@@ -29,12 +31,12 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
 
     let entry
     vm.runInNewContext(await readFile(new URL('../lib/client.js', import.meta.url), 'utf8'), {
-      document, Intl, setTimeout, clearTimeout, window: { __ModuleLoader__: { load(value) { entry = value } } },
+      document, Intl, setTimeout, clearTimeout, window: Object.assign(dom.window, { __ModuleLoader__: { load(value) { entry = value } } }),
     })
     const plugin = entry.factory(name => name === 'react' ? React : name === '@deepseek-ai/dsh-client-ui-goal' ? {} : primitives)
 
     const rows = [], dictionaries = new Map()
-    await plugin.apply({ effect(fn) { disposers.push(fn()) }, locale: { register(id, value) { dictionaries.set(id, value); return () => {} } },
+    await plugin.apply({ effect(fn) { disposers.push(fn()) }, locale: { bind: () => (key, args = {}) => (key === 'numberLocale' ? 'zh-CN' : key === 'milliseconds' ? '{value} 毫秒' : key === 'seconds' ? '{value} 秒' : key).replace('{value}', args.value ?? ''), register(id, value) { dictionaries.set(id, value); return () => {} } },
       remote: { async $mount() { return () => {} } }, get: () => ({}), configForms: { get: () => ({}) }, reflect: { provide: () => () => {}, get: () => ({ read() {} }) },
       slots: { inject(_key, fn) { fn() }, register(options, component) { rows.push({ options, component }); return () => {} } } })
 
@@ -253,6 +255,19 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     await React.act(async () => render())
     await React.act(async () => document.querySelector('[data-composer-stat="activity"]').click())
     assert.match(document.querySelector('[role="dialog"]').textContent, /Whole-log statistics are not available yet/)
+    const startup = rows.find(row => row.options.id === 'startup-performance')
+    assert.ok(startup, 'Startup page contributes to the public settings section')
+    assert.ok(rows.some(row => row.options.id === 'startup-performance-probe'))
+    const history = startup.options.inject().history
+    history.record({ id: 'load-1', at: 1, total: 100, phases: [{ key: 'client', milliseconds: 100, ratio: 1 }] })
+    history.record({ id: 'load-2', at: 2, total: 200, phases: [{ key: 'paint', milliseconds: 200, ratio: 1 }] })
+    await React.act(async () => root.render(React.createElement(startup.component, { history })))
+    assert.match(document.querySelector('[data-startup-settings]').textContent, /200/)
+    await React.act(async () => document.querySelector('[aria-label="range"]').click())
+    const loadOne = [...document.querySelectorAll('[role="menuitem"]')].find(row => row.textContent.includes('100'))
+    assert.ok(loadOne)
+    await React.act(async () => loadOne.click())
+    assert.match(document.querySelector('[data-startup-settings] svg').textContent, /100/)
   } finally {
 
     await React.act(async () => root.unmount())

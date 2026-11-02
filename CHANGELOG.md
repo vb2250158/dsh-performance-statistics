@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.18
+
+- Add browser-local startup history in Settings, with a per-navigation pie, independent refresh selection, configurable retention and explicit application-shell readiness semantics.
+
 ## 0.1.17
 
 - Widen the session statistics dialog, use a compact wide-screen legend and show the session ID.

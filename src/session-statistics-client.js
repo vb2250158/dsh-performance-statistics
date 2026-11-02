@@ -200,7 +200,7 @@ for (const [key, zh, en, scopeZh, scopeEn] of stageCopy) {
   Object.assign(sessionStatisticsLocales.en, { [`phase_${key}`]: en, [`scope_${key}`]: scopeEn })
 }
 
-const stageColors = ['var(--dsw-alias-link)', 'var(--dsw-alias-state-success-primary)', 'var(--dsw-alias-state-warn-primary)',
+export const stageColors = ['var(--dsw-alias-link)', 'var(--dsw-alias-state-success-primary)', 'var(--dsw-alias-state-warn-primary)',
   'var(--dsw-alias-state-error-secondary)', 'var(--dsw-alias-label-secondary)',
   'color-mix(in oklab,var(--dsw-alias-link),var(--dsw-alias-state-success-primary) 50%)',
   'color-mix(in oklab,var(--dsw-alias-link),var(--dsw-alias-state-error-secondary) 50%)']
@@ -278,7 +278,7 @@ function statisticsNumber(value, t, digits = 1) {
   return new Intl.NumberFormat(t('numberLocale'), { maximumFractionDigits: digits }).format(value)
 }
 
-function statisticsDuration(value, t) {
+export function statisticsDuration(value, t) {
   if (value === undefined) return t('missing')
   return value > 1000
     ? t('seconds', { value: statisticsNumber(value / 1000, t, 3) })
@@ -287,7 +287,7 @@ function statisticsDuration(value, t) {
 
 const statisticsNode = React.createElement
 
-function StatisticsPie({ phases, total, selected, select, t, level = 0, label = t('pie') }) {
+export function StatisticsPie({ phases, total, selected, select, t, level = 0, label = t('pie') }) {
   const h = statisticsNode, circumference = 2 * Math.PI * 82
   let offset = 0
   const percent = ratio => ratio > 0 && ratio < 0.001 ? '<0.1%' : `${statisticsNumber(ratio * 100, t)}%`
