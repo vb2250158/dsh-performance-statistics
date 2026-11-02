@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.19
+
+- Size startup pies and legends against their settings content container. Stack the chart above one readable legend column in narrow panels and keep it top-aligned in wide panels.
+
 ## 0.1.18
 
 - Add browser-local startup history in Settings, with a per-navigation pie, independent refresh selection, configurable retention and explicit application-shell readiness semantics.
