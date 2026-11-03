@@ -1,11 +1,12 @@
-import { startupResourceDetails, startupMeasuredDetails } from './startup-details.js'
+import { startupResourceDetails, startupMeasuredDetails, startupReadiness, startupOutcome } from './startup-details.js'
 
 /** Shared truthful startup milestones; elapsed time is presentation-only, never an estimated deadline. */
 export function startupProgress(shellAt, measures, completedAt) {
-  const ready = stage => measures.some(row => row.kind === 'phase' && row.stage === stage && !['failed', 'error'].includes(row.state))
-  const shell = shellAt !== undefined, list = ready('session-list'), content = ready('session-content')
+  const readiness = startupReadiness(measures)
+  const shell = shellAt !== undefined, list = readiness['session-list'], content = readiness['session-content']
   return { phase: completedAt !== undefined ? 'complete' : !shell ? 'initialize' : !list ? 'list' : !content ? 'content' : 'paint',
-    steps: Number(shell) + Number(list) + Number(content) + Number(completedAt !== undefined), completedAt }
+    steps: Number(shell) + Number(!!list) + Number(!!content) + Number(completedAt !== undefined), completedAt,
+    visibility: [list, content].filter(row => row?.outcome === 'not-visible').map(row => ({ stage: row.stage, reason: row.reason })) }
 }
 
 /** Partition navigation through the first painted application shell, without adding overlapping resources. */
@@ -36,7 +37,7 @@ export function createStartupHistory(storage) {
           && ['bytes', 'decodedBytes', 'request', 'download'].every(key => row[key] === undefined || Number.isFinite(row[key]) && row[key] >= 0)) : undefined,
           measures: Array.isArray(r.measures) ? r.measures.filter(row => row && typeof row.key === 'string' && ['phase', 'plugin'].includes(row.kind)
             && typeof row.stage === 'string' && Number.isFinite(row.start) && Number.isFinite(row.end) && row.end >= row.start
-            && (row.kind !== 'plugin' || typeof row.plugin === 'string' && typeof row.state === 'string')) : undefined })).slice(-saved.limit) }
+            && (row.kind !== 'plugin' || typeof row.plugin === 'string' && typeof row.state === 'string')).map(startupOutcome).filter(row => row !== undefined) : undefined })).slice(-saved.limit) }
   } catch (error) { snapshot = { ...snapshot, storageFailed: true } }
   const publish = next => {
     snapshot = next
@@ -65,7 +66,8 @@ export function createStartupCollector(win, history) {
   const listeners = new Set()
   const publish = measures => {
     const next = startupProgress(shellAt, measures, completedAt)
-    if (next.phase === snapshot.phase && next.steps === snapshot.steps && next.completedAt === snapshot.completedAt) return
+    if (next.phase === snapshot.phase && next.steps === snapshot.steps && next.completedAt === snapshot.completedAt
+      && JSON.stringify(next.visibility) === JSON.stringify(snapshot.visibility)) return
     snapshot = next
     for (const listener of listeners) listener()
   }
@@ -73,9 +75,8 @@ export function createStartupCollector(win, history) {
   const sessionsReadyAt = () => {
     const measures = startupMeasuredDetails(win.performance, win.performance.now())
     publish(measures)
-    const successful = row => !['failed', 'error'].includes(row.state)
-    const list = measures.find(row => row.kind === 'phase' && row.stage === 'session-list' && successful(row))
-    const content = measures.find(row => row.kind === 'phase' && row.stage === 'session-content' && successful(row))
+    const readiness = startupReadiness(measures)
+    const list = readiness['session-list'], content = readiness['session-content']
     return list && content ? Math.max(list.end, content.end) : undefined
   }
   const finish = () => {

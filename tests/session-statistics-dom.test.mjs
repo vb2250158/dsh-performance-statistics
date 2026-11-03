@@ -290,6 +290,15 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     await React.act(async () => document.querySelector('[data-startup-resources] [data-stage-legend="script"]').click())
     await React.act(async () => document.querySelector('[data-startup-resources] [data-stage-legend="bundle"]').click())
     assert.match(document.querySelector('[data-startup-resource]').textContent, /dsh-fixture\/client.js.*20.*50.*120.*250/)
+    history.record({ id: 'load-na', at: 3, total: 300, criterion: 'session-first-screen', phases: [{ key: 'sessionLoad', milliseconds: 300, ratio: 1 }],
+      measures: [{ key: 'list-na', kind: 'phase', stage: 'session-list', outcome: 'not-visible', reason: 'sidebar-collapsed', start: 0, end: 200 },
+        { key: 'content-na', kind: 'phase', stage: 'session-content', outcome: 'not-visible', reason: 'initial-main-panel', start: 0, end: 250 }] })
+    await React.act(async () => root.render(React.createElement(startup.component, { key: 'na-screen', history })))
+    assert.match(document.querySelector('[data-startup-settings]').textContent, /列表数据已就绪.*未展开.*主会话内容不适用.*不表示该面板内容已加载/)
+    assert.match(document.querySelector('[data-startup-settings] svg').textContent, /当前首屏就绪耗时/)
+    await React.act(async () => document.querySelector('[data-startup-settings] [data-stage-legend="sessionLoad"]').click())
+    assert.equal(document.querySelector('[data-startup-measured] [data-stage-legend="session-content"]'), null, 'N/A timestamp is not a content loading duration')
+    assert.equal(document.querySelector('[data-startup-measured] [data-stage-legend="session-list"]'), null)
     const feedback = rows.find(row => row.options.id === 'startup-performance-feedback')
     assert.ok(feedback)
     let status = { phase: 'list', steps: 1 }, clock = 1200, listener
@@ -308,6 +317,15 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     assert.match(document.querySelector('[data-startup-feedback]').textContent, /1 秒后收起/)
     clock = 5300; await React.act(async () => testContext.mock.timers.tick(250))
     assert.equal(document.querySelector('[data-startup-feedback]'), null)
+    clock = 6000
+    status = { phase: 'content', steps: 2, visibility: [{ stage: 'session-list', reason: 'sidebar-collapsed' }] }
+    await React.act(async () => root.render(React.createElement(feedback.component, { key: 'na-feedback', collector, now })))
+    assert.match(document.querySelector('[data-startup-feedback]').textContent, /列表数据已就绪.*侧栏折叠.*未展开/)
+    assert.doesNotMatch(document.querySelector('[data-startup-feedback]').textContent, /列表已显示/)
+    status = { phase: 'complete', steps: 4, completedAt: 6000, visibility: [...status.visibility, { stage: 'session-content', reason: 'initial-main-panel' }] }
+    await React.act(async () => listener())
+    assert.match(document.querySelector('[data-startup-feedback]').textContent, /当前首屏已就绪.*当前可见首屏已就绪.*主会话内容不适用.*不表示该面板内容已加载.*3 秒后收起/)
+    assert.doesNotMatch(document.querySelector('[data-startup-feedback]').textContent, /首屏会话加载完成/)
     testContext.mock.timers.reset()
   } finally {
 

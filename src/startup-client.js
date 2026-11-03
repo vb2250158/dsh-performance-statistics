@@ -2,8 +2,8 @@ import * as React from 'react'
 import { Button, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
 import { createStartupHistory, createStartupCollector } from './startup-timing.js'
 import { StatisticsPie, statisticsDuration, stageColors } from './session-statistics-client.js'
-import { startupIntervalPie } from './startup-details.js'
-import { StartupFeedback, startupFeedbackCss } from './startup-feedback.js'
+import { startupIntervalPie, startupReadiness } from './startup-details.js'
+import { StartupFeedback, startupFeedbackCss, startupVisibilityText } from './startup-feedback.js'
 
 /** Early Core timings and plugin state intervals share the navigation clock, not CPU samples. */
 function StartupMeasured({ record, phase, t }) {
@@ -12,7 +12,7 @@ function StartupMeasured({ record, phase, t }) {
   let start = 0
   for (const row of record.phases) { if (row.key === phase) break; start += row.milliseconds }
   const end = start + (record.phases.find(row => row.key === phase)?.milliseconds ?? 0)
-  const measured = (record.measures ?? []).filter(row => row.start < end && row.end > start)
+  const measured = (record.measures ?? []).filter(row => row.outcome !== 'not-visible' && row.start < end && row.end > start)
     .map(row => ({ ...row, start: Math.max(start, row.start), end: Math.min(end, row.end) }))
   const phases = startupIntervalPie(start, end, measured.filter(row => row.kind === 'phase').map(row => ({ ...row, key: row.stage })))
   const pluginRows = measured.filter(row => row.kind === 'plugin' && row.plugin && (!stage || row.stage === stage))
@@ -76,8 +76,12 @@ function StartupResources({ record, phase, t }) {
 export const startupLocales = {
   zh: { title: '启动性能', run: '第 {value} 次', pending: '正在等待首屏加载完成…', range: '刷新记录', retained: '保留最近 {value} 次',
     feedbackTitle: '正在启动初始化', feedbackComplete: '首屏会话已就绪', feedbackElapsed: '已用 {value} 秒', feedbackSteps: '首屏准备 {value} / 4', feedbackClosing: '{value} 秒后收起', feedbackHide: '收起',
-    feedback_initialize: '正在初始化界面与插件', feedback_list: '正在加载首屏会话列表', feedback_content: '列表已显示，正在加载当前会话内容', feedback_paint: '会话数据已就绪，正在完成首屏绘制', feedback_complete: '首屏会话加载完成，性能统计已结束',
-    sessionLoad: '首屏会话加载与提交', 'boot_session-list': '首屏会话列表', 'boot_session-content': '当前会话首批内容',
+    feedback_initialize: '正在初始化界面与插件', feedback_list: '正在加载首屏会话列表', feedback_content: '正在准备当前会话内容', feedback_paint: '首屏就绪判定已完成，正在完成绘制', feedback_complete: '首屏会话加载完成，性能统计已结束',
+    visibleComplete: '当前首屏已就绪', feedbackCompleteLimited: '当前可见首屏已就绪，本次性能统计已结束', visibleTotal: '当前首屏就绪耗时',
+    visibilityListCollapsed: '会话列表数据已就绪；侧栏折叠，首屏未展开',
+    visibilityInitialPanel: '初始为其他面板，DSH 主会话内容不适用；不表示该面板内容已加载完成',
+    visibilityOther: '{surface}首屏未展示：{reason}', visibilityList: '会话列表', visibilityContent: '主会话内容',
+    sessionLoad: '首屏准备与就绪判定', 'boot_session-list': '首屏会话列表', 'boot_session-content': '当前会话首批内容',
     loadingSessions: '本次首屏会话尚未加载完成，统计仍在进行；需要宿主提供列表和内容的成功提交计时点。',
     legacyScope: '旧记录仅统计到应用外壳挂载，未包含首屏会话加载；无法补算。', legacyTotal: '应用外壳耗时（旧口径）',
     measured: '启动内部阶段', plugins: '逐插件启动区间', measuredScope: '已采集阶段与本环节的交集；重叠时优先显示较短区间，每毫秒只分配一次。',
@@ -89,15 +93,19 @@ export const startupLocales = {
     oldDetails: '这条历史记录未采集内部明细；更新后刷新页面可记录。', moreResources: '继续显示资源（{shown} / {total}）',
     remainingResources: '尚未展开的资源', requestWait: '请求到首字节', download: '下载', transferred: '传输大小', decoded: '解码后大小',
     resourceAvailability: '零传输量可能来自缓存或浏览器权限限制；资源请求不含完整地址、查询参数或内容。',
-    scope: '从本次导航开始，到首屏会话列表与当前会话首批内容提交后两帧；无选中会话时由宿主确认空白首屏。记录保存在当前浏览器，不累计多次刷新。',
+    scope: '从本次导航到首屏列表与主会话内容的显示或不展示判定后两帧；折叠侧栏及初始其他面板分别说明，不代表自定义面板内容已加载。记录保存在当前浏览器，不累计多次刷新。',
     missing: '浏览器存储不可用，本次数据仍可查看，刷新后可能丢失。',
     navigation: '导航与重定向', dns: '域名解析', connect: '建立连接', requestQueue: '请求准备', server: '文档首字节等待',
     document: '文档接收', parse: 'HTML 解析', client: '客户端启动与界面挂载', paint: '页面加载与首屏绘制',
     phaseScope: '相邻浏览器时间点之间的独占区间；缓存命中时部分阶段为零。', total: '首屏加载耗时' },
   en: { title: 'Startup performance', run: 'Load {value}', pending: 'Waiting for the first screen…', range: 'Load history', retained: 'Keep latest {value} loads',
     feedbackTitle: 'Starting up', feedbackComplete: 'Initial sessions ready', feedbackElapsed: '{value} s elapsed', feedbackSteps: 'Screen preparation {value} / 4', feedbackClosing: 'Closes in {value} s', feedbackHide: 'Hide',
-    feedback_initialize: 'Initializing the interface and plugins', feedback_list: 'Loading the initial session list', feedback_content: 'List visible; loading the current session', feedback_paint: 'Session data ready; finishing the first screen', feedback_complete: 'Initial sessions loaded; performance measurement complete',
-    sessionLoad: 'Initial session load and commit', 'boot_session-list': 'Initial session list', 'boot_session-content': 'Current session initial content',
+    feedback_initialize: 'Initializing the interface and plugins', feedback_list: 'Loading the initial session list', feedback_content: 'Preparing current session content', feedback_paint: 'Readiness resolved; finishing first-screen paint', feedback_complete: 'Initial sessions loaded; performance measurement complete',
+    visibleComplete: 'Current screen ready', feedbackCompleteLimited: 'Current visible screen ready; performance measurement complete', visibleTotal: 'Current screen readiness time',
+    visibilityListCollapsed: 'Session list data ready; sidebar collapsed, list not displayed',
+    visibilityInitialPanel: 'Another panel is initially active; DSH main-session content does not apply. This does not measure that panel’s content loading.',
+    visibilityOther: '{surface} not displayed: {reason}', visibilityList: 'Session list', visibilityContent: 'Main-session content',
+    sessionLoad: 'First-screen readiness resolution', 'boot_session-list': 'Initial session list', 'boot_session-content': 'Current session initial content',
     loadingSessions: 'Initial sessions are not ready; measurement is still pending. Core must report successful list and content commits.',
     legacyScope: 'This older record ends at shell mount and excludes initial session loading. Missing time cannot be reconstructed.', legacyTotal: 'Shell time (old endpoint)',
     measured: 'Internal startup stages', plugins: 'Individual plugin intervals', measuredScope: 'Measured intervals clipped to this stage. Shorter overlapping intervals take precedence; each millisecond is allocated once.',
@@ -109,7 +117,7 @@ export const startupLocales = {
     oldDetails: 'Details were not captured for this load. Reload after updating to record them.', moreResources: 'Show more resources ({shown} / {total})',
     remainingResources: 'Resources not yet expanded', requestWait: 'Request to first byte', download: 'Download', transferred: 'Transferred', decoded: 'Decoded',
     resourceAvailability: 'Zero transfer size may mean caching or browser restrictions. Full URLs, query parameters and content are not stored.',
-    scope: 'Navigation through two frames after the initial session list and current session content commit. Core confirms an empty screen when no session is selected. Stored in this browser; loads are not accumulated.',
+    scope: 'Navigation through two frames after initial list and main-session display or non-visibility decisions. Collapsed sidebar and other initial panels are identified separately; custom-panel content loading is not measured. Stored per load in this browser.',
     missing: 'Browser storage is unavailable. The current measurement remains visible but may be lost on refresh.',
     navigation: 'Navigation and redirects', dns: 'DNS lookup', connect: 'Connection', requestQueue: 'Request preparation', server: 'Document first byte wait',
     document: 'Document transfer', parse: 'HTML parsing', client: 'Client startup and shell mount', paint: 'Page load and first-screen paint',
@@ -121,6 +129,7 @@ export function StartupSettings({ history, t }) {
   const state = React.useSyncExternalStore(history.subscribe, history.getSnapshot), [selected, select] = React.useState(null)
   const [open, setOpen] = React.useState(false), [limits, setLimits] = React.useState(false), [phase, setPhase] = React.useState()
   const record = state.records.find(r => r.id === selected) ?? state.records.at(-1), h = React.createElement
+  const visibility = Object.values(startupReadiness(record?.measures ?? [])).filter(row => row.outcome === 'not-visible')
   return h('div', { className: 'dsh-session-statistics-body', 'data-startup-settings': '' },
     h('h2', null, t('title')),
     h('p', { className: 'dsh-session-statistics-note' }, t('scope')),
@@ -135,7 +144,8 @@ export function StartupSettings({ history, t }) {
     state.storageFailed && h('p', { role: 'status' }, t('missing')),
     state.pending && h('p', { role: 'status' }, t('loadingSessions')),
     record && record.criterion !== 'session-first-screen' && h('p', { className: 'dsh-session-statistics-note' }, t('legacyScope')),
-    record ? h(StatisticsPie, { total: record.total, selected: phase, select: setPhase, t: (key, args) => t(key === 'total' && record.criterion !== 'session-first-screen' ? 'legacyTotal' : key, args), label: t('title'),
+    ...visibility.map(row => h('p', { key: row.stage, className: 'dsh-session-statistics-note', 'data-startup-visibility': row.stage }, startupVisibilityText(row, t))),
+    record ? h(StatisticsPie, { total: record.total, selected: phase, select: setPhase, t: (key, args) => t(key === 'total' ? record.criterion !== 'session-first-screen' ? 'legacyTotal' : visibility.length ? 'visibleTotal' : key : key, args), label: t('title'),
       phases: record.phases.filter(p => p.milliseconds > 0).map((p, index) => ({ ...p, color: stageColors[index % stageColors.length], label: t(p.key), description: t('phaseScope') })) }) : h('p', { role: 'status' }, t('pending')),
     record && phase && h(StartupMeasured, { key: 'measured-' + record.id + phase, record, phase, t }),
     record && phase && h(StartupResources, { key: 'resources-' + record.id + phase, record, phase, t }))

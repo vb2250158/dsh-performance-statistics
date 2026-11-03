@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.24
+
+- Resolve initial-screen readiness from committed or explicitly non-visible Core surface outcomes. Preserve outcome/reason in refresh history and interpret older measurements without outcome as committed.
+- Explain collapsed-sidebar data readiness and inapplicable main-session content for other initial panels in both the HUD and statistics. Non-visible timestamps are not attributed as content-loading durations. Retain total timing, independent history and three-second dismissal.
+
 ## 0.1.23
 
 - Add a non-blocking bottom-right startup status card driven by the same collector as performance history. Show real milestones and navigation-relative elapsed time, then count down three seconds to dismissal after initial session readiness.

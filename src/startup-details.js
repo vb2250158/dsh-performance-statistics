@@ -1,3 +1,24 @@
+/** Normalize finite first-screen outcomes; older committed measurements omitted outcome. */
+export function startupOutcome(row) {
+  if (row.kind !== 'phase' || !['session-list', 'session-content'].includes(row.stage)) return row
+  const outcome = row.outcome ?? 'committed'
+  if (!['committed', 'not-visible'].includes(outcome)) return undefined
+  if (outcome === 'not-visible' && (typeof row.reason !== 'string' || row.reason.trim().length === 0)) return undefined
+  const { reason, ...base } = row
+  return outcome === 'not-visible' ? { ...base, outcome, reason } : { ...base, outcome }
+}
+
+/** Read the first valid finite result per surface, without equating non-visibility with content loading. */
+export function startupReadiness(measures) {
+  const result = {}
+  for (const row of measures) {
+    if (row.kind !== 'phase' || !['session-list', 'session-content'].includes(row.stage) || result[row.stage]) continue
+    const normalized = startupOutcome(row)
+    if (normalized && !['failed', 'error'].includes(row.state)) result[row.stage] = normalized
+  }
+  return result
+}
+
 /** Allocate overlapping measured intervals once, retaining uncovered time explicitly. */
 export function startupIntervalPie(start, end, spans) {
   const clipped = spans.map(row => ({ ...row, start: Math.max(start, row.start), end: Math.min(end, row.end) }))
@@ -46,7 +67,10 @@ export function startupMeasuredDetails(performance, completed, shellAt) {
     .map((row, index) => ({ key: `measure-${index}`, kind: row.detail.kind, stage: row.detail.stage,
       plugin: typeof row.detail.plugin === 'string' ? row.detail.plugin : undefined,
       state: typeof row.detail.state === 'string' ? row.detail.state : undefined,
+      ...(row.detail.outcome === undefined ? {} : { outcome: row.detail.outcome }),
+      ...(row.detail.reason === undefined ? {} : { reason: row.detail.reason }),
       start: Math.max(0, row.startTime), end: Math.min(completed, row.startTime + row.duration) }))
+    .map(startupOutcome).filter(row => row !== undefined)
   const mount = rows.find(row => row.kind === 'phase' && row.stage === 'mount')
   const nativeReactCommit = rows.some(row => row.kind === 'phase' && row.stage === 'react-mount')
   // A native first-commit interval replaces the older shell-probe approximation.
