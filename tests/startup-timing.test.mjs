@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { startupPhases, createStartupHistory, createStartupCollector } from '../src/startup-timing.js'
+import { startupPhases, createStartupHistory, createStartupCollector, startupProgress } from '../src/startup-timing.js'
 
 test('navigation stages partition elapsed time including cached and missing timestamps', () => {
   for (const nav of [undefined, { domainLookupStart: 2, domainLookupEnd: 4, connectEnd: 10, requestStart: 12, responseStart: 20, responseEnd: 30, domInteractive: 40 }]) {
@@ -31,6 +31,7 @@ test('collector waits for list and current content commits as well as shell and 
     addEventListener: (_, fn) => { listener = fn }, removeEventListener: (_, fn) => { assert.equal(fn, listener) },
     requestAnimationFrame: fn => { frames.push(fn); return frames.length }, cancelAnimationFrame() {} }
   const collector = createStartupCollector(win, { record: r => calls.push(r) })
+  const phases = [], unsubscribe = collector.subscribe(() => phases.push(collector.getSnapshot().phase))
   collector.painted(); assert.equal(frames.length, 0)
   win.document.readyState = 'complete'; listener(); listener(); assert.equal(frames.length, 0, 'shell mount is not first-screen completion')
   const ready = stage => measures.push({ name: 'dsh:startup', startTime: 0, duration: now, detail: { version: 1, kind: 'phase', stage } })
@@ -41,8 +42,44 @@ test('collector waits for list and current content commits as well as shell and 
   assert.equal(calls[0].phases.find(row => row.key === 'sessionLoad').milliseconds, 30)
   assert.equal(calls[0].phases.reduce((sum, row) => sum + row.milliseconds, 0), 50)
   assert.ok(disconnected > 0)
+  assert.deepEqual(phases, ['list', 'content', 'paint', 'complete'])
+  assert.equal(collector.getSnapshot().completedAt, calls[0].total)
+  unsubscribe()
   collector.dispose()
   frames = []; const cancelled = createStartupCollector(win, { record: () => assert.fail('disposed') }); cancelled.painted(); cancelled.dispose();frames.shift()();frames.shift()()
+})
+
+test('progress reflects actual milestones and failed readiness never advances it', () => {
+  const failed = { kind: 'phase', stage: 'session-list', state: 'failed', end: 1 }
+  assert.equal(startupProgress(0, [failed]).phase, 'list')
+  assert.equal(startupProgress(0, [{ ...failed, state: undefined }]).phase, 'content')
+  assert.equal(startupProgress(undefined, []).steps, 0)
+  assert.equal(startupProgress(1, [], 9).phase, 'complete')
+})
+
+test('hot reload reuses completed current navigation without leaving history pending or inflating its time', () => {
+  let value
+  const storage = { getItem: () => value, setItem: (_, text) => { value = text } }
+  const partial = { id: '1', total: 10, at: 1, phases: [] }
+  createStartupHistory(storage).record(partial)
+  const full = { ...partial, total: 30, criterion: 'session-first-screen' }
+  const updated = createStartupHistory(storage); updated.record(full)
+  assert.equal(updated.getSnapshot().records.length, 1)
+  assert.equal(updated.getSnapshot().records[0].total, 30)
+  const reloaded = createStartupHistory(storage)
+  assert.equal(reloaded.getSnapshot().pending, true)
+  reloaded.record({ ...full, total: 999 })
+  assert.equal(reloaded.getSnapshot().pending, false)
+  assert.equal(reloaded.getSnapshot().records[0].total, 30)
+  assert.equal(reloaded.getSnapshot().records[0].sequence, 1)
+  const frames = []
+  const measures = ['session-list', 'session-content'].map(stage => ({ name: 'dsh:startup', startTime: 0, duration: 20, detail: { version: 1, kind: 'phase', stage } }))
+  const win = { document: { readyState: 'complete' }, performance: { timeOrigin: 1, now: () => 200, getEntriesByType: type => type === 'measure' ? measures : [] },
+    addEventListener() {}, removeEventListener() {}, requestAnimationFrame: fn => { frames.push(fn); return 1 }, cancelAnimationFrame() {} }
+  const collector = createStartupCollector(win, reloaded)
+  collector.painted(); frames.shift()(); frames.shift()()
+  assert.equal(collector.getSnapshot().completedAt, 30, 'feedback reuses the original history endpoint after a hot reload')
+  collector.dispose()
 })
 
 test('late collector consumes buffered empty-screen readiness and absent signals never finish', () => {

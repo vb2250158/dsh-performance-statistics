@@ -2,6 +2,8 @@
 
 ## Startup details
 
+Once the interface mounts, a non-blocking bottom-right card shows actual initialization, initial list, current content and paint milestones. Navigation-relative elapsed time uses the same collector as history; only successful completion starts the three-second dismissal countdown. Remaining startup time is not estimated. The card is click-through outside its Hide action, respects reduced motion, and hiding it does not cancel measurement. Live updates stay in memory and do not repeatedly persist history.
+
 The complete endpoint waits for page load, successful initial session-list and current-session content commits, then two paint frames. It excludes historical pagination and ongoing background updates. Matching Core emits completed `dsh:startup` measures with `detail.version=1`, `kind=phase`, and `stage=session-list|session-content`, including explicit empty-list or no-selected-session readiness. Missing signals keep the current load pending. New records carry `criterion=session-first-screen`; older shell-only records retain their values and are labelled with their original endpoint.
 
 In Settings → Startup performance, select a load and click a phase slice or legend to inspect boot phases, plugin states and resource type/file pies. Early Core timings must be captured before this plugin activates; missing instrumentation and old records remain explicitly unavailable. Resource Timing provides path labels, relative timestamps and byte counts without storing origins, query parameters or content. Browser restrictions and resource buffer limits may reduce available detail.

@@ -3,6 +3,7 @@ import { Button, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
 import { createStartupHistory, createStartupCollector } from './startup-timing.js'
 import { StatisticsPie, statisticsDuration, stageColors } from './session-statistics-client.js'
 import { startupIntervalPie } from './startup-details.js'
+import { StartupFeedback, startupFeedbackCss } from './startup-feedback.js'
 
 /** Early Core timings and plugin state intervals share the navigation clock, not CPU samples. */
 function StartupMeasured({ record, phase, t }) {
@@ -74,6 +75,8 @@ function StartupResources({ record, phase, t }) {
 
 export const startupLocales = {
   zh: { title: '启动性能', run: '第 {value} 次', pending: '正在等待首屏加载完成…', range: '刷新记录', retained: '保留最近 {value} 次',
+    feedbackTitle: '正在启动初始化', feedbackComplete: '首屏会话已就绪', feedbackElapsed: '已用 {value} 秒', feedbackSteps: '首屏准备 {value} / 4', feedbackClosing: '{value} 秒后收起', feedbackHide: '收起',
+    feedback_initialize: '正在初始化界面与插件', feedback_list: '正在加载首屏会话列表', feedback_content: '列表已显示，正在加载当前会话内容', feedback_paint: '会话数据已就绪，正在完成首屏绘制', feedback_complete: '首屏会话加载完成，性能统计已结束',
     sessionLoad: '首屏会话加载与提交', 'boot_session-list': '首屏会话列表', 'boot_session-content': '当前会话首批内容',
     loadingSessions: '本次首屏会话尚未加载完成，统计仍在进行；需要宿主提供列表和内容的成功提交计时点。',
     legacyScope: '旧记录仅统计到应用外壳挂载，未包含首屏会话加载；无法补算。', legacyTotal: '应用外壳耗时（旧口径）',
@@ -92,6 +95,8 @@ export const startupLocales = {
     document: '文档接收', parse: 'HTML 解析', client: '客户端启动与界面挂载', paint: '页面加载与首屏绘制',
     phaseScope: '相邻浏览器时间点之间的独占区间；缓存命中时部分阶段为零。', total: '首屏加载耗时' },
   en: { title: 'Startup performance', run: 'Load {value}', pending: 'Waiting for the first screen…', range: 'Load history', retained: 'Keep latest {value} loads',
+    feedbackTitle: 'Starting up', feedbackComplete: 'Initial sessions ready', feedbackElapsed: '{value} s elapsed', feedbackSteps: 'Screen preparation {value} / 4', feedbackClosing: 'Closes in {value} s', feedbackHide: 'Hide',
+    feedback_initialize: 'Initializing the interface and plugins', feedback_list: 'Loading the initial session list', feedback_content: 'List visible; loading the current session', feedback_paint: 'Session data ready; finishing the first screen', feedback_complete: 'Initial sessions loaded; performance measurement complete',
     sessionLoad: 'Initial session load and commit', 'boot_session-list': 'Initial session list', 'boot_session-content': 'Current session initial content',
     loadingSessions: 'Initial sessions are not ready; measurement is still pending. Core must report successful list and content commits.',
     legacyScope: 'This older record ends at shell mount and excludes initial session loading. Missing time cannot be reconstructed.', legacyTotal: 'Shell time (old endpoint)',
@@ -142,10 +147,19 @@ export function installStartupStatistics(ctx) {
   try { storage = window.localStorage } catch (error) { storage = { getItem: () => { throw error }, setItem: () => { throw error } } }
   const history = createStartupHistory(storage), collector = createStartupCollector(window, history)
   ctx.effect(() => () => collector.dispose())
+  ctx.effect(() => {
+    const style = document.createElement('style')
+    style.textContent = startupFeedbackCss
+    document.head.appendChild(style)
+    return () => style.remove()
+  })
   ctx.effect(() => ctx.locale.register('startup-statistics', startupLocales))
   function Probe() { React.useLayoutEffect(() => { collector.painted() }, []); return null }
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({ name: 'shell.overlay', id: 'startup-performance-probe' }, Probe))
   const startupT = ctx.locale.bind('startup-statistics'), sharedT = ctx.locale.bind('performance-statistics')
+  const now = () => window.performance.now()
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({ name: 'shell.overlay', id: 'startup-performance-feedback', locale: 'startup-statistics', inject: () => ({ collector, now }) },
+    props => React.createElement(StartupFeedback, { ...props, t: startupT })))
   ctx.slots.inject('settings.section', () => ctx.slots.register({ name: 'settings.section', id: 'startup-performance', order: 80,
     locale: 'startup-statistics', label: () => startupT('title'), inject: () => ({ history }) },
   props => React.createElement(StartupSettings, { ...props, t: (key, args) => {

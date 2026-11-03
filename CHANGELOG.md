@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.23
+
+- Add a non-blocking bottom-right startup status card driven by the same collector as performance history. Show real milestones and navigation-relative elapsed time, then count down three seconds to dismissal after initial session readiness.
+- Add reduced-motion support, viewport-safe placement, click-through presentation, manual dismissal and timer/listener/style cleanup. Progress updates do not write browser history or estimate remaining startup time.
+
 ## 0.1.22
 
 - Complete startup measurement only after successful first-screen session-list and current-session content commits, page load and two paint frames. Missing readiness leaves the current load pending instead of reporting shell-only time as complete.

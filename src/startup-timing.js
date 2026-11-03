@@ -1,5 +1,13 @@
 import { startupResourceDetails, startupMeasuredDetails } from './startup-details.js'
 
+/** Shared truthful startup milestones; elapsed time is presentation-only, never an estimated deadline. */
+export function startupProgress(shellAt, measures, completedAt) {
+  const ready = stage => measures.some(row => row.kind === 'phase' && row.stage === stage && !['failed', 'error'].includes(row.state))
+  const shell = shellAt !== undefined, list = ready('session-list'), content = ready('session-content')
+  return { phase: completedAt !== undefined ? 'complete' : !shell ? 'initialize' : !list ? 'list' : !content ? 'content' : 'paint',
+    steps: Number(shell) + Number(list) + Number(content) + Number(completedAt !== undefined), completedAt }
+}
+
 /** Partition navigation through the first painted application shell, without adding overlapping resources. */
 export function startupPhases(navigation, shellPaint, completed, sessionsAt) {
   const points = [0, navigation?.domainLookupStart, navigation?.domainLookupEnd, navigation?.connectEnd,
@@ -37,18 +45,37 @@ export function createStartupHistory(storage) {
   }
   return { getSnapshot: () => snapshot, subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener) },
     setLimit: limit => { if ([20, 50, 100].includes(limit)) publish({ ...snapshot, limit, records: snapshot.records.slice(-limit) }) },
-    record: record => { if (!snapshot.records.some(r => r.id === record.id)) publish({ ...snapshot, pending: false, records: [...snapshot.records,
-      { ...record, sequence: (snapshot.records.at(-1)?.sequence ?? 0) + 1 }].slice(-snapshot.limit) }) } }
+    record: record => {
+      const existing = snapshot.records.find(row => row.id === record.id)
+      if (existing) {
+        if (record.criterion === 'session-first-screen') publish({ ...snapshot, pending: false,
+          records: existing.criterion === 'session-first-screen' ? snapshot.records : snapshot.records.map(row => row === existing ? { ...record, sequence: existing.sequence } : row) })
+        return snapshot.records.find(row => row.id === record.id)
+      }
+      publish({ ...snapshot, pending: false, records: [...snapshot.records,
+        { ...record, sequence: (snapshot.records.at(-1)?.sequence ?? 0) + 1 }].slice(-snapshot.limit) })
+      return snapshot.records.at(-1)
+    } }
 }
 
 /** Wait for shell, successful list/content commits and page load; missing readiness never counts as success. */
 export function createStartupCollector(win, history) {
   let disposed = false, scheduled = false, shellAt, firstFrame, secondFrame, observer
+  let snapshot = startupProgress(undefined, []), completedAt
+  const listeners = new Set()
+  const publish = measures => {
+    const next = startupProgress(shellAt, measures, completedAt)
+    if (next.phase === snapshot.phase && next.steps === snapshot.steps && next.completedAt === snapshot.completedAt) return
+    snapshot = next
+    for (const listener of listeners) listener()
+  }
   const navigation = () => win.performance.getEntriesByType('navigation')[0]
   const sessionsReadyAt = () => {
     const measures = startupMeasuredDetails(win.performance, win.performance.now())
-    const list = measures.find(row => row.kind === 'phase' && row.stage === 'session-list')
-    const content = measures.find(row => row.kind === 'phase' && row.stage === 'session-content')
+    publish(measures)
+    const successful = row => !['failed', 'error'].includes(row.state)
+    const list = measures.find(row => row.kind === 'phase' && row.stage === 'session-list' && successful(row))
+    const content = measures.find(row => row.kind === 'phase' && row.stage === 'session-content' && successful(row))
     return list && content ? Math.max(list.end, content.end) : undefined
   }
   const finish = () => {
@@ -59,9 +86,11 @@ export function createStartupCollector(win, history) {
     firstFrame = win.requestAnimationFrame(() => { secondFrame = win.requestAnimationFrame(() => {
       if (disposed) return
       const total = win.performance.now(), nav = navigation()
-      history.record({ id: String(win.performance.timeOrigin), at: win.performance.timeOrigin, total,
+      const recorded = history.record({ id: String(win.performance.timeOrigin), at: win.performance.timeOrigin, total,
         type: nav?.type ?? 'navigate', criterion: 'session-first-screen', phases: startupPhases(nav, shellAt, total, Math.max(shellAt, sessionsAt)),
         resources: startupResourceDetails(win.performance, total), measures: startupMeasuredDetails(win.performance, total, shellAt) })
+      completedAt = recorded?.total ?? total
+      publish(startupMeasuredDetails(win.performance, total))
       observer?.disconnect()
     }) })
   }
@@ -70,7 +99,9 @@ export function createStartupCollector(win, history) {
     observer = new win.PerformanceObserver(finish)
     observer.observe({ type: 'measure', buffered: true })
   }
-  return { painted: () => { shellAt ??= win.performance.now(); finish() }, dispose: () => {
+  return { getSnapshot: () => snapshot, subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener) },
+    painted: () => { shellAt ??= win.performance.now(); finish() }, dispose: () => {
     disposed = true; observer?.disconnect(); win.removeEventListener('load', finish); win.cancelAnimationFrame(firstFrame); win.cancelAnimationFrame(secondFrame)
+    listeners.clear()
   } }
 }

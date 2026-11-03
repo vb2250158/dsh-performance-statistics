@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url'
 import vm from 'node:vm'
 import test from 'node:test'
 
-test('built statistics modal renders an exclusive pie, selectable stages and exact operation readings', { skip: !process.env.DSH_SOURCE_ROOT }, async () => {
+test('built statistics modal renders an exclusive pie, selectable stages and exact operation readings', { skip: !process.env.DSH_SOURCE_ROOT }, async (testContext) => {
   const sourceRoot = process.env.DSH_SOURCE_ROOT
   const require = createRequire(resolve(sourceRoot, 'packages/client/ui-primitives/package.json'))
   const React = require('react'), { JSDOM } = require('jsdom')
@@ -31,9 +31,9 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
 
     let entry
     vm.runInNewContext(await readFile(new URL('../lib/client.js', import.meta.url), 'utf8'), {
-      document, Intl, setTimeout, clearTimeout, window: Object.assign(dom.window, { __ModuleLoader__: { load(value) { entry = value } } }),
+      document, Intl, setTimeout, clearTimeout, setInterval: (...args) => setInterval(...args), clearInterval: (...args) => clearInterval(...args), window: Object.assign(dom.window, { __ModuleLoader__: { load(value) { entry = value } } }),
     })
-    const plugin = entry.factory(name => name === 'react' ? React : name === '@deepseek-ai/dsh-client-ui-goal' ? {} : primitives)
+    const plugin = entry.factory(name => name === 'react' ? React : name === 'react-dom' ? require('react-dom') : name === '@deepseek-ai/dsh-client-ui-goal' ? {} : primitives)
 
     const rows = [], dictionaries = new Map()
     let startupLanguage = 'zh'
@@ -290,12 +290,32 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     await React.act(async () => document.querySelector('[data-startup-resources] [data-stage-legend="script"]').click())
     await React.act(async () => document.querySelector('[data-startup-resources] [data-stage-legend="bundle"]').click())
     assert.match(document.querySelector('[data-startup-resource]').textContent, /dsh-fixture\/client.js.*20.*50.*120.*250/)
+    const feedback = rows.find(row => row.options.id === 'startup-performance-feedback')
+    assert.ok(feedback)
+    let status = { phase: 'list', steps: 1 }, clock = 1200, listener
+    const collector = { getSnapshot: () => status, subscribe: fn => { listener = fn; return () => { listener = undefined } } }
+    const now = () => clock
+    testContext.mock.timers.enable({ apis: ['setInterval'] })
+    await React.act(async () => root.render(React.createElement(feedback.component, { collector, now })))
+    assert.match(document.querySelector('[data-startup-feedback]').textContent, /首屏会话列表.*1 \/ 4/)
+    assert.match(document.querySelector('[data-startup-feedback]').textContent, /1.2 秒/)
+    status = { phase: 'content', steps: 2 }; await React.act(async () => listener())
+    assert.match(document.querySelector('[data-startup-feedback] [role="status"]').textContent, /当前会话内容/)
+    clock = 2200; status = { phase: 'complete', steps: 4, completedAt: 2200 }
+    await React.act(async () => listener())
+    assert.match(document.querySelector('[data-startup-feedback]').textContent, /统计已结束.*3 秒后收起/)
+    clock = 4200; await React.act(async () => testContext.mock.timers.tick(250))
+    assert.match(document.querySelector('[data-startup-feedback]').textContent, /1 秒后收起/)
+    clock = 5300; await React.act(async () => testContext.mock.timers.tick(250))
+    assert.equal(document.querySelector('[data-startup-feedback]'), null)
+    testContext.mock.timers.reset()
   } finally {
 
     await React.act(async () => root.unmount())
     for (const dispose of disposers.reverse()) if (typeof dispose === 'function') dispose()
     assert.equal(document.querySelectorAll('.dsh-session-statistics').length, 0)
     assert.ok(![...document.querySelectorAll('style')].some(style => style.textContent.includes('.dsh-session-statistics-summary')))
+    assert.ok(![...document.querySelectorAll('style')].some(style => style.textContent.includes('.dsh-startup-feedback')))
     hooks.deregister(); dom.window.close()
     for (const [key, descriptor] of Object.entries(previous)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key] }
   }
