@@ -1,3 +1,5 @@
+import { startupResourceDetails, startupMeasuredDetails } from './startup-details.js'
+
 /** Partition navigation through the first painted application shell, without adding overlapping resources. */
 export function startupPhases(navigation, shellPaint, completed) {
   const points = [0, navigation?.domainLookupStart, navigation?.domainLookupEnd, navigation?.connectEnd,
@@ -18,8 +20,14 @@ export function createStartupHistory(storage) {
   try {
     const saved = JSON.parse(storage.getItem(key) ?? 'null')
     if (saved && [20, 50, 100].includes(saved.limit) && Array.isArray(saved.records)) snapshot = { ...snapshot, limit: saved.limit,
-      records: saved.records.filter(r => typeof r.id === 'string' && Number.isFinite(r.total) && r.total >= 0 && Number.isFinite(r.at) && Number.isInteger(r.sequence) && Array.isArray(r.phases)
-        && r.phases.every(p => typeof p.key === 'string' && Number.isFinite(p.milliseconds) && p.milliseconds >= 0 && Number.isFinite(p.ratio))).slice(-saved.limit) }
+      records: saved.records.filter(r => r && typeof r.id === 'string' && Number.isFinite(r.total) && r.total >= 0 && Number.isFinite(r.at) && Number.isInteger(r.sequence) && Array.isArray(r.phases)
+        && r.phases.every(p => p && typeof p.key === 'string' && Number.isFinite(p.milliseconds) && p.milliseconds >= 0 && Number.isFinite(p.ratio)))
+        .map(r => ({ ...r, resources: Array.isArray(r.resources) ? r.resources.filter(row => row && typeof row.key === 'string' && typeof row.label === 'string'
+          && typeof row.type === 'string' && Number.isFinite(row.start) && Number.isFinite(row.end) && row.end >= row.start
+          && ['bytes', 'decodedBytes', 'request', 'download'].every(key => row[key] === undefined || Number.isFinite(row[key]) && row[key] >= 0)) : undefined,
+          measures: Array.isArray(r.measures) ? r.measures.filter(row => row && typeof row.key === 'string' && ['phase', 'plugin'].includes(row.kind)
+            && typeof row.stage === 'string' && Number.isFinite(row.start) && Number.isFinite(row.end) && row.end >= row.start
+            && (row.kind !== 'plugin' || typeof row.plugin === 'string' && typeof row.state === 'string')) : undefined })).slice(-saved.limit) }
   } catch (error) { snapshot = { ...snapshot, storageFailed: true } }
   const publish = next => {
     snapshot = next
@@ -43,7 +51,8 @@ export function createStartupCollector(win, history) {
       if (disposed) return
       const total = win.performance.now(), nav = navigation()
       history.record({ id: String(win.performance.timeOrigin), at: win.performance.timeOrigin, total,
-        type: nav?.type ?? 'navigate', phases: startupPhases(nav, shellAt, total) })
+        type: nav?.type ?? 'navigate', phases: startupPhases(nav, shellAt, total),
+        resources: startupResourceDetails(win.performance, total), measures: startupMeasuredDetails(win.performance, total, shellAt) })
     }) })
   }
   win.addEventListener('load', finish)

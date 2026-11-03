@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.20
+
+- Add startup drilldowns for versioned early Core phases and plugin observations, plus resource types and individual request timing/byte details. Keep concurrent request and plugin sums separate from exclusive navigation time. Preserve per-load history and label missing early instrumentation explicitly.
+- Split the measured renderer mount call from the observed interval between its return and shell commit. Timing intervals are not CPU samples; activation outcomes are not reported as isolated initialization costs.
+
 ## 0.1.19
 
 - Size startup pies and legends against their settings content container. Stack the chart above one readable legend column in narrow panels and keep it top-aligned in wide panels.

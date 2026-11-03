@@ -1,5 +1,11 @@
 # DSH Performance Statistics
 
+## Startup details
+
+In Settings → Startup performance, select a load and click a phase slice or legend to inspect boot phases, plugin states and resource type/file pies. Early Core timings must be captured before this plugin activates; missing instrumentation and old records remain explicitly unavailable. Resource Timing provides path labels, relative timestamps and byte counts without storing origins, query parameters or content. Browser restrictions and resource buffer limits may reduce available detail.
+
+Internal boot phases partition the selected interval, with shorter overlapping measurements taking precedence. Plugin-state and resource pies separately sum concurrent intervals and can exceed elapsed startup time; they are not CPU samples or proof of blocking. Resource details include request-to-first-byte time, download time, transferred and decoded sizes. Longer requests appear first; collapsed resources retain their combined slice.
+
 Individual hook cards keep titles, status and descriptions inside a padded container. Expanded readings use separate cells with wrapping labels and a single column on narrow screens, keeping each duration beside its owning step.
 
 [简体中文](README.md) · MIT

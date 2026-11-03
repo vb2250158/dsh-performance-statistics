@@ -259,7 +259,10 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     assert.ok(startup, 'Startup page contributes to the public settings section')
     assert.ok(rows.some(row => row.options.id === 'startup-performance-probe'))
     const history = startup.options.inject().history
-    history.record({ id: 'load-1', at: 1, total: 100, phases: [{ key: 'client', milliseconds: 100, ratio: 1 }] })
+    history.record({ id: 'load-1', at: 1, total: 100, phases: [{ key: 'client', milliseconds: 100, ratio: 1 }],
+      resources: [{ key: 'bundle', label: 'dsh-fixture/client.js', type: 'script', start: 10, end: 80, request: 20, download: 50, bytes: 120, decodedBytes: 250 }],
+      measures: [{ key: 'phase', kind: 'phase', stage: 'plugins', start: 10, end: 90 },
+        { key: 'plugin', kind: 'plugin', stage: 'plugins', plugin: 'dsh-fixture', state: 'pending', start: 20, end: 80 }] })
     history.record({ id: 'load-2', at: 2, total: 200, phases: [{ key: 'paint', milliseconds: 200, ratio: 1 }] })
     await React.act(async () => root.render(React.createElement(startup.component, { history })))
     assert.match(document.querySelector('[data-startup-settings]').textContent, /200/)
@@ -268,6 +271,14 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     assert.ok(loadOne)
     await React.act(async () => loadOne.click())
     assert.match(document.querySelector('[data-startup-settings] svg').textContent, /100/)
+    await React.act(async () => document.querySelector('[data-startup-settings] [data-stage-legend="client"]').click())
+    await React.act(async () => document.querySelector('[data-startup-measured] [data-stage-legend="plugins"]').click())
+    await React.act(async () => document.querySelector('[data-startup-measured] [data-stage-legend="dsh-fixture"]').click())
+    assert.ok(document.querySelector('[data-startup-measured] [data-stage-legend="pending"]'))
+    assert.ok(document.querySelector('[data-startup-resources]'))
+    await React.act(async () => document.querySelector('[data-startup-resources] [data-stage-legend="script"]').click())
+    await React.act(async () => document.querySelector('[data-startup-resources] [data-stage-legend="bundle"]').click())
+    assert.match(document.querySelector('[data-startup-resource]').textContent, /dsh-fixture\/client.js.*20.*50.*120.*250/)
   } finally {
 
     await React.act(async () => root.unmount())
