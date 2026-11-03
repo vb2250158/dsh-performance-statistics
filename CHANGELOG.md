@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.22
+
+- Complete startup measurement only after successful first-screen session-list and current-session content commits, page load and two paint frames. Missing readiness leaves the current load pending instead of reporting shell-only time as complete.
+- Add session loading to the stage pie and label historical shell-only records with their original endpoint. Require versioned `session-list` and `session-content` Core phase measurements, including explicit empty-screen readiness.
+
 ## 0.1.21
 
 - Prefer the native first React application commit interval over the legacy shell-probe approximation, and localize its label in Chinese and English. Preserve the fallback for older Core versions.

@@ -2,6 +2,8 @@
 
 ## Startup details
 
+The complete endpoint waits for page load, successful initial session-list and current-session content commits, then two paint frames. It excludes historical pagination and ongoing background updates. Matching Core emits completed `dsh:startup` measures with `detail.version=1`, `kind=phase`, and `stage=session-list|session-content`, including explicit empty-list or no-selected-session readiness. Missing signals keep the current load pending. New records carry `criterion=session-first-screen`; older shell-only records retain their values and are labelled with their original endpoint.
+
 In Settings → Startup performance, select a load and click a phase slice or legend to inspect boot phases, plugin states and resource type/file pies. Early Core timings must be captured before this plugin activates; missing instrumentation and old records remain explicitly unavailable. Resource Timing provides path labels, relative timestamps and byte counts without storing origins, query parameters or content. Browser restrictions and resource buffer limits may reduce available detail.
 
 Internal boot phases partition the selected interval, with shorter overlapping measurements taking precedence. Plugin-state and resource pies separately sum concurrent intervals and can exceed elapsed startup time; they are not CPU samples or proof of blocking. Resource details include request-to-first-byte time, download time, transferred and decoded sizes. Longer requests appear first; collapsed resources retain their combined slice.

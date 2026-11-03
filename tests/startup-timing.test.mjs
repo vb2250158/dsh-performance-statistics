@@ -23,15 +23,38 @@ test('refresh history survives reload, retains independent rounds and configurab
   broken.record(record(0)); assert.equal(broken.getSnapshot().records.length, 1); assert.equal(broken.getSnapshot().storageFailed, true)
 })
 
-test('collector waits for shell and load, uses two frames and cancels on disposal', () => {
-  let listener, frames = [], calls = [], now = 10
-  const win = { document: { readyState: 'loading' }, performance: { timeOrigin: 1234, now: () => now, getEntriesByType: () => [{}] },
+test('collector waits for list and current content commits as well as shell and load', () => {
+  let listener, observerCallback, disconnected = 0, frames = [], calls = [], now = 10
+  const measures = []
+  const win = { document: { readyState: 'loading' }, performance: { timeOrigin: 1234, now: () => now, getEntriesByType: type => type === 'measure' ? measures : [] },
+    PerformanceObserver: class { constructor(callback) { observerCallback = callback } observe(options) { assert.equal(options.type, 'measure') } disconnect() { disconnected++ } },
     addEventListener: (_, fn) => { listener = fn }, removeEventListener: (_, fn) => { assert.equal(fn, listener) },
     requestAnimationFrame: fn => { frames.push(fn); return frames.length }, cancelAnimationFrame() {} }
   const collector = createStartupCollector(win, { record: r => calls.push(r) })
   collector.painted(); assert.equal(frames.length, 0)
-  win.document.readyState = 'complete'; listener(); listener(); assert.equal(frames.length, 1)
+  win.document.readyState = 'complete'; listener(); listener(); assert.equal(frames.length, 0, 'shell mount is not first-screen completion')
+  const ready = stage => measures.push({ name: 'dsh:startup', startTime: 0, duration: now, detail: { version: 1, kind: 'phase', stage } })
+  now = 30; ready('session-list'); observerCallback(); assert.equal(frames.length, 0, 'content is still loading')
+  now = 40; ready('session-content'); observerCallback(); observerCallback(); assert.equal(frames.length, 1)
   frames.shift()(); now = 50; frames.shift()(); assert.equal(calls.length, 1); assert.equal(calls[0].total, 50)
+  assert.equal(calls[0].criterion, 'session-first-screen')
+  assert.equal(calls[0].phases.find(row => row.key === 'sessionLoad').milliseconds, 30)
+  assert.equal(calls[0].phases.reduce((sum, row) => sum + row.milliseconds, 0), 50)
+  assert.ok(disconnected > 0)
   collector.dispose()
   frames = []; const cancelled = createStartupCollector(win, { record: () => assert.fail('disposed') }); cancelled.painted(); cancelled.dispose();frames.shift()();frames.shift()()
+})
+
+test('late collector consumes buffered empty-screen readiness and absent signals never finish', () => {
+  const frames = [], saved = [], measures = []
+  const win = { document: { readyState: 'complete' }, performance: { timeOrigin: 1, now: () => 100, getEntriesByType: type => type === 'measure' ? measures : [] },
+    addEventListener() {}, removeEventListener() {}, requestAnimationFrame: fn => { frames.push(fn); return 1 }, cancelAnimationFrame() {} }
+  const first = createStartupCollector(win, { record: row => saved.push(row) })
+  first.painted(); assert.equal(frames.length, 0); first.dispose()
+  for (const stage of ['session-list', 'session-content']) measures.push({ name: 'dsh:startup', startTime: 0, duration: 0, detail: { version: 1, kind: 'phase', stage } })
+  const second = createStartupCollector(win, { record: row => saved.push(row) })
+  second.painted(); frames.shift()(); frames.shift()()
+  assert.equal(saved.length, 1)
+  assert.equal(saved[0].criterion, 'session-first-screen')
+  second.dispose()
 })

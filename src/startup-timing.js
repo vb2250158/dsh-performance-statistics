@@ -1,10 +1,11 @@
 import { startupResourceDetails, startupMeasuredDetails } from './startup-details.js'
 
 /** Partition navigation through the first painted application shell, without adding overlapping resources. */
-export function startupPhases(navigation, shellPaint, completed) {
+export function startupPhases(navigation, shellPaint, completed, sessionsAt) {
   const points = [0, navigation?.domainLookupStart, navigation?.domainLookupEnd, navigation?.connectEnd,
     navigation?.requestStart, navigation?.responseStart, navigation?.responseEnd, navigation?.domInteractive, shellPaint, completed]
   const keys = ['navigation', 'dns', 'connect', 'requestQueue', 'server', 'document', 'parse', 'client', 'paint']
+  if (sessionsAt !== undefined) { points.splice(-1, 0, sessionsAt); keys.splice(-1, 0, 'sessionLoad') }
   let cursor = 0
   return keys.map((key, index) => {
     const end = Math.min(completed, Math.max(cursor, Number.isFinite(points[index + 1]) ? points[index + 1] : cursor))
@@ -16,7 +17,7 @@ export function startupPhases(navigation, shellPaint, completed) {
 /** Browser-local refresh history. Storage failure leaves the current measurement readable. */
 export function createStartupHistory(storage) {
   const key = 'dsh-performance-statistics:startup:v1'
-  let snapshot = { records: [], limit: 50, storageFailed: false }, listeners = new Set()
+  let snapshot = { records: [], limit: 50, storageFailed: false, pending: true }, listeners = new Set()
   try {
     const saved = JSON.parse(storage.getItem(key) ?? 'null')
     if (saved && [20, 50, 100].includes(saved.limit) && Array.isArray(saved.records)) snapshot = { ...snapshot, limit: saved.limit,
@@ -36,27 +37,40 @@ export function createStartupHistory(storage) {
   }
   return { getSnapshot: () => snapshot, subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener) },
     setLimit: limit => { if ([20, 50, 100].includes(limit)) publish({ ...snapshot, limit, records: snapshot.records.slice(-limit) }) },
-    record: record => { if (!snapshot.records.some(r => r.id === record.id)) publish({ ...snapshot, records: [...snapshot.records,
+    record: record => { if (!snapshot.records.some(r => r.id === record.id)) publish({ ...snapshot, pending: false, records: [...snapshot.records,
       { ...record, sequence: (snapshot.records.at(-1)?.sequence ?? 0) + 1 }].slice(-snapshot.limit) }) } }
 }
 
-/** Arm one measurement per document; the shell seat calls painted after its layout commits. */
+/** Wait for shell, successful list/content commits and page load; missing readiness never counts as success. */
 export function createStartupCollector(win, history) {
-  let disposed = false, scheduled = false, shellAt, firstFrame, secondFrame
+  let disposed = false, scheduled = false, shellAt, firstFrame, secondFrame, observer
   const navigation = () => win.performance.getEntriesByType('navigation')[0]
+  const sessionsReadyAt = () => {
+    const measures = startupMeasuredDetails(win.performance, win.performance.now())
+    const list = measures.find(row => row.kind === 'phase' && row.stage === 'session-list')
+    const content = measures.find(row => row.kind === 'phase' && row.stage === 'session-content')
+    return list && content ? Math.max(list.end, content.end) : undefined
+  }
   const finish = () => {
-    if (disposed || scheduled || shellAt === undefined || win.document.readyState !== 'complete') return
+    if (disposed || scheduled) return
+    const sessionsAt = sessionsReadyAt()
+    if (shellAt === undefined || sessionsAt === undefined || win.document.readyState !== 'complete') return
     scheduled = true
     firstFrame = win.requestAnimationFrame(() => { secondFrame = win.requestAnimationFrame(() => {
       if (disposed) return
       const total = win.performance.now(), nav = navigation()
       history.record({ id: String(win.performance.timeOrigin), at: win.performance.timeOrigin, total,
-        type: nav?.type ?? 'navigate', phases: startupPhases(nav, shellAt, total),
+        type: nav?.type ?? 'navigate', criterion: 'session-first-screen', phases: startupPhases(nav, shellAt, total, Math.max(shellAt, sessionsAt)),
         resources: startupResourceDetails(win.performance, total), measures: startupMeasuredDetails(win.performance, total, shellAt) })
+      observer?.disconnect()
     }) })
   }
   win.addEventListener('load', finish)
+  if (win.PerformanceObserver) {
+    observer = new win.PerformanceObserver(finish)
+    observer.observe({ type: 'measure', buffered: true })
+  }
   return { painted: () => { shellAt ??= win.performance.now(); finish() }, dispose: () => {
-    disposed = true; win.removeEventListener('load', finish); win.cancelAnimationFrame(firstFrame); win.cancelAnimationFrame(secondFrame)
+    disposed = true; observer?.disconnect(); win.removeEventListener('load', finish); win.cancelAnimationFrame(firstFrame); win.cancelAnimationFrame(secondFrame)
   } }
 }

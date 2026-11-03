@@ -274,6 +274,8 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     assert.ok(loadOne)
     await React.act(async () => loadOne.click())
     assert.match(document.querySelector('[data-startup-settings] svg').textContent, /100/)
+    assert.match(document.querySelector('[data-startup-settings]').textContent, /旧记录仅统计到应用外壳/)
+    assert.match(document.querySelector('[data-startup-settings] svg').textContent, /旧口径/)
     await React.act(async () => document.querySelector('[data-startup-settings] [data-stage-legend="client"]').click())
     assert.match(document.querySelector('[data-startup-measured] [data-stage-legend="react-mount"]').textContent, /React 应用首次提交/)
     startupLanguage = 'en'
