@@ -48,6 +48,8 @@ export function startupMeasuredDetails(performance, completed, shellAt) {
       state: typeof row.detail.state === 'string' ? row.detail.state : undefined,
       start: Math.max(0, row.startTime), end: Math.min(completed, row.startTime + row.duration) }))
   const mount = rows.find(row => row.kind === 'phase' && row.stage === 'mount')
-  if (mount && Number.isFinite(shellAt) && shellAt > mount.end) rows.push({ key: 'shell-commit', kind: 'phase', stage: 'shell-commit', start: mount.end, end: Math.min(shellAt, completed) })
+  const nativeReactCommit = rows.some(row => row.kind === 'phase' && row.stage === 'react-mount')
+  // A native first-commit interval replaces the older shell-probe approximation.
+  if (!nativeReactCommit && mount && Number.isFinite(shellAt) && shellAt > mount.end) rows.push({ key: 'shell-commit', kind: 'phase', stage: 'shell-commit', start: mount.end, end: Math.min(shellAt, completed) })
   return rows
 }

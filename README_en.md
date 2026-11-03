@@ -110,3 +110,5 @@ Choose the whole session or a completed turn from the dropdown. Total, model and
 Settings → Startup performance records each navigation or refresh independently, from Navigation Timing zero until document load and two animation frames after the shell.overlay seat mounts. The pie partitions navigation, DNS, connection, document TTFB/transfer, parsing, client mount and paint. This measures the application shell, not completion of session bodies, lazy panels or background requests. History stays in this browser, defaults to 50 entries, and supports 20/50/100 entries. Storage failures keep the current record in memory with a visible notice. No cumulative view is provided.
 
 Startup charts follow the settings content width: narrow panels stack the pie above one legend column; wide panels align both columns at the top.
+
+When Core records the first React application commit, startup details use that native interval. Older Core versions with only a renderer mount measurement retain the shell-probe approximation; the approximation is not added over a native React commit.

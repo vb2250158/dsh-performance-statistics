@@ -65,3 +65,16 @@ test('shell commit tail is recorded only after a measured mount call has returne
   assert.deepEqual(rows.at(-1), { key: 'shell-commit', kind: 'phase', stage: 'shell-commit', start: 30, end: 50 })
   assert.equal(startupMeasuredDetails({ getEntriesByType: () => [] }, 60, 50).length, 0)
 })
+
+test('native React commit replaces the legacy shell tail without hiding the measured interval', () => {
+  const mount = { name: 'dsh:startup', startTime: 10, duration: 10, detail: { version: 1, kind: 'phase', stage: 'mount' } }
+  const react = { name: 'dsh:startup', startTime: 15, duration: 25, detail: { version: 1, kind: 'phase', stage: 'react-mount' } }
+  const rows = startupMeasuredDetails({ getEntriesByType: () => [mount, react] }, 50, 39)
+  assert.equal(rows.filter(row => row.stage === 'react-mount').length, 1)
+  assert.equal(rows.some(row => row.stage === 'shell-commit'), false)
+  assert.deepEqual(rows.find(row => row.stage === 'react-mount'), { key: 'measure-1', kind: 'phase', stage: 'react-mount', plugin: undefined, state: undefined, start: 15, end: 40 })
+  const pie = startupIntervalPie(0, 50, rows.map(row => ({ ...row, key: row.stage })))
+  assert.equal(pie.reduce((sum, row) => sum + row.milliseconds, 0), 50)
+  assert.equal(pie.find(row => row.key === 'react-mount').milliseconds, 20)
+  assert.ok(startupMeasuredDetails({ getEntriesByType: () => [mount] }, 50, 39).some(row => row.stage === 'shell-commit'), 'Older Core versions retain the shell-probe fallback')
+})

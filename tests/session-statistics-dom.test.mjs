@@ -36,7 +36,8 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     const plugin = entry.factory(name => name === 'react' ? React : name === '@deepseek-ai/dsh-client-ui-goal' ? {} : primitives)
 
     const rows = [], dictionaries = new Map()
-    await plugin.apply({ effect(fn) { disposers.push(fn()) }, locale: { bind: () => (key, args = {}) => (key === 'numberLocale' ? 'zh-CN' : key === 'milliseconds' ? '{value} 毫秒' : key === 'seconds' ? '{value} 秒' : key).replace('{value}', args.value ?? ''), register(id, value) { dictionaries.set(id, value); return () => {} } },
+    let startupLanguage = 'zh'
+    await plugin.apply({ effect(fn) { disposers.push(fn()) }, locale: { bind: id => (key, args = {}) => (id === 'startup-statistics' ? dictionaries.get(id)?.[startupLanguage]?.[key] ?? key : key === 'numberLocale' ? 'zh-CN' : key === 'milliseconds' ? '{value} 毫秒' : key === 'seconds' ? '{value} 秒' : key).replace('{value}', args.value ?? ''), register(id, value) { dictionaries.set(id, value); return () => {} } },
       remote: { async $mount() { return () => {} } }, get: () => ({}), configForms: { get: () => ({}) }, reflect: { provide: () => () => {}, get: () => ({ read() {} }) },
       slots: { inject(_key, fn) { fn() }, register(options, component) { rows.push({ options, component }); return () => {} } } })
 
@@ -262,16 +263,24 @@ test('built statistics modal renders an exclusive pie, selectable stages and exa
     history.record({ id: 'load-1', at: 1, total: 100, phases: [{ key: 'client', milliseconds: 100, ratio: 1 }],
       resources: [{ key: 'bundle', label: 'dsh-fixture/client.js', type: 'script', start: 10, end: 80, request: 20, download: 50, bytes: 120, decodedBytes: 250 }],
       measures: [{ key: 'phase', kind: 'phase', stage: 'plugins', start: 10, end: 90 },
+        { key: 'mount', kind: 'phase', stage: 'mount', start: 88, end: 92 },
+        { key: 'react', kind: 'phase', stage: 'react-mount', start: 90, end: 99 },
         { key: 'plugin', kind: 'plugin', stage: 'plugins', plugin: 'dsh-fixture', state: 'pending', start: 20, end: 80 }] })
     history.record({ id: 'load-2', at: 2, total: 200, phases: [{ key: 'paint', milliseconds: 200, ratio: 1 }] })
     await React.act(async () => root.render(React.createElement(startup.component, { history })))
     assert.match(document.querySelector('[data-startup-settings]').textContent, /200/)
-    await React.act(async () => document.querySelector('[aria-label="range"]').click())
+    await React.act(async () => document.querySelector('[aria-label="刷新记录"]').click())
     const loadOne = [...document.querySelectorAll('[role="menuitem"]')].find(row => row.textContent.includes('100'))
     assert.ok(loadOne)
     await React.act(async () => loadOne.click())
     assert.match(document.querySelector('[data-startup-settings] svg').textContent, /100/)
     await React.act(async () => document.querySelector('[data-startup-settings] [data-stage-legend="client"]').click())
+    assert.match(document.querySelector('[data-startup-measured] [data-stage-legend="react-mount"]').textContent, /React 应用首次提交/)
+    startupLanguage = 'en'
+    await React.act(async () => root.render(React.createElement(startup.component, { history })))
+    assert.match(document.querySelector('[data-startup-measured] [data-stage-legend="react-mount"]').textContent, /First React application commit/)
+    startupLanguage = 'zh'
+    await React.act(async () => root.render(React.createElement(startup.component, { history })))
     await React.act(async () => document.querySelector('[data-startup-measured] [data-stage-legend="plugins"]').click())
     await React.act(async () => document.querySelector('[data-startup-measured] [data-stage-legend="dsh-fixture"]').click())
     assert.ok(document.querySelector('[data-startup-measured] [data-stage-legend="pending"]'))

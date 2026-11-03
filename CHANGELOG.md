@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.21
+
+- Prefer the native first React application commit interval over the legacy shell-probe approximation, and localize its label in Chinese and English. Preserve the fallback for older Core versions.
+
 ## 0.1.20
 
 - Add startup drilldowns for versioned early Core phases and plugin observations, plus resource types and individual request timing/byte details. Keep concurrent request and plugin sums separate from exclusive navigation time. Preserve per-load history and label missing early instrumentation explicitly.
